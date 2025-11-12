@@ -26,7 +26,8 @@ dependencies = [
     "redis>=5.0.5",
     "orjson>=3.10.0",
     "babel>=2.15.0",
-    "rapidfuzz>=3.9.0"
+    "rapidfuzz>=3.9.0",
+    "aiohttp-socks>=0.8.4"
 ]
 readme = "README.md"
 

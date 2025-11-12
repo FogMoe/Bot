@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+import os
 
 from pydantic import BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,11 +26,33 @@ class RedisSettings(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    provider: Literal["openai", "azure_openai", "anthropic", "custom"] = "openai"
+    provider: Literal["openai", "azure", "azure_openai", "anthropic", "custom"] = "openai"
     model: str = "gpt-4o-mini"
     api_key: SecretStr | None = None
     base_url: HttpUrl | None = None
+    api_version: str | None = None
     context_window_tokens: int = Field(default=120_000, ge=1000)
+
+    def apply_environment(self) -> None:
+        """Populate SDK-required environment vars from settings."""
+
+        if self.provider in {"openai", "custom"}:
+            if self.api_key:
+                value = self.api_key.get_secret_value()
+                os.environ["OPENAI_API_KEY"] = value
+            if self.base_url:
+                os.environ["OPENAI_BASE_URL"] = str(self.base_url)
+
+        elif self.provider in {"azure", "azure_openai"}:
+            if self.api_key:
+                value = self.api_key.get_secret_value()
+                os.environ["AZURE_OPENAI_API_KEY"] = value
+                os.environ["OPENAI_API_KEY"] = value
+            if self.base_url:
+                os.environ["AZURE_OPENAI_ENDPOINT"] = str(self.base_url)
+            if self.api_version:
+                os.environ["AZURE_OPENAI_API_VERSION"] = self.api_version
+                os.environ["OPENAI_API_VERSION"] = self.api_version
 
 
 class SubscriptionSettings(BaseModel):
@@ -39,10 +62,16 @@ class SubscriptionSettings(BaseModel):
 
 
 class BotSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="BOT_", env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_prefix="BOT_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__"
+    )
 
     environment: Literal["dev", "staging", "prod"] = "dev"
     telegram_token: SecretStr
+    telegram_proxy: str | None = None
     webhook_secret: SecretStr | None = None
     default_language: str = "en"
     timezone: str = "UTC"

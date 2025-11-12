@@ -115,7 +115,7 @@ class SubscriptionCard(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    metadata: Mapped[dict | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON)
     created_by_admin_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -225,7 +225,7 @@ class Message(Base):
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
     user: Mapped[User | None] = relationship()
-    reply_to: Mapped["Message" | None] = relationship(remote_side="Message.id")
+    reply_to: Mapped["Message | None"] = relationship(remote_side="Message.id")
 
 
 class AgentRun(Base):
@@ -395,7 +395,7 @@ class VectorIndexSnapshot(Base):
         default="pending",
         nullable=False,
     )
-    metadata: Mapped[dict | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)

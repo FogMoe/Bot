@@ -6,6 +6,7 @@ import asyncio
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 
 from app.agents.runner import AgentOrchestrator
@@ -19,21 +20,29 @@ from app.logging import configure_logging, logger
 async def main() -> None:
     configure_logging()
     settings = get_settings()
+    # CRITICAL: Apply environment variables BEFORE creating agent
+    # Azure OpenAI provider needs these env vars to be set
+    settings.llm.apply_environment()
 
+    session = (
+        AiohttpSession(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
+    )
     bot = Bot(
         token=settings.telegram_token.get_secret_value(),
         default=DefaultBotProperties(
             parse_mode=ParseMode.MARKDOWN_V2 if settings.enable_markdown_v2 else None
         ),
+        session=session,
     )
     dp = Dispatcher()
     dp.include_router(setup_routers())
 
     database = Database(settings=settings)
     dp.update.outer_middleware(DbSessionMiddleware(database))
-    dp.update.outer_middleware(UserContextMiddleware())
+    dp.message.middleware(UserContextMiddleware())
     dp.message.middleware(RateLimitMiddleware(settings))
 
+    # Create agent AFTER environment variables are set
     agent = AgentOrchestrator(settings=settings)
 
     logger.info("bot_starting", environment=settings.environment)

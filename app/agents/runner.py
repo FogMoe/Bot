@@ -7,6 +7,8 @@ from typing import Sequence
 
 import httpx
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.azure import AzureProvider
 
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, get_settings
@@ -23,16 +25,39 @@ class AgentDependencies:
     recent_messages: Sequence[MessageModel]
 
 
+def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
+    provider = settings.llm.provider.lower()
+    if provider in {"azure", "azure_openai"} or provider.startswith("azure"):
+        if not settings.llm.base_url or not settings.llm.api_version or not settings.llm.api_key:
+            raise ValueError(
+                "Azure OpenAI requires BOT_LLM__BASE_URL, BOT_LLM__API_VERSION, and BOT_LLM__API_KEY."
+            )
+        azure_provider = AzureProvider(
+            azure_endpoint=str(settings.llm.base_url),
+            api_version=settings.llm.api_version,
+            api_key=settings.llm.api_key.get_secret_value(),
+        )
+        return OpenAIChatModel(settings.llm.model, provider=azure_provider)
+
+    provider_map = {
+        "openai": "openai",
+        "anthropic": "anthropic",
+        "custom": "openai",
+    }
+    prefix = provider_map.get(provider, "openai")
+    return f"{prefix}:{settings.llm.model}"
+
+
 def build_agent(
     settings: BotSettings, tool_registry: ToolRegistry | None = None
 ) -> Agent[AgentDependencies, str]:
     registry = tool_registry or ToolRegistry()
+    model_spec = _model_spec(settings)
     agent = Agent(
-        f"openai:{settings.llm.model}",
+        model=model_spec,
         deps_type=AgentDependencies,
-        result_type=str,
         instructions="You are a helpful assistant that references memories when relevant.",
-        name="telegram_helper",
+        name="FOGMOE",
         tools=list(registry.iter_tools()),
     )
 

@@ -21,7 +21,13 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def handle_start(message: Message, db_user: User, session: AsyncSession) -> None:
+async def handle_start(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
     subscription_service = SubscriptionService(session)
     subscription = await subscription_service.get_active_subscription(db_user)
     plan_name = "Free"
@@ -29,17 +35,24 @@ async def handle_start(message: Message, db_user: User, session: AsyncSession) -
         plan = await session.get(SubscriptionPlan, subscription.plan_id)
         if plan:
             plan_name = plan.name
-    await message.answer(
+    reply_text = (
         f"Hello, {message.from_user.full_name}!\n"
-        f"Current plan: {plan_name}. Use /activate <code> to upgrade."
+        f"Current plan: {plan_name}. Use /activate <card_code> to upgrade."
     )
+    await message.answer(reply_text, parse_mode=None)
 
 
 @router.message(Command("activate"))
-async def handle_activate(message: Message, db_user: User, session: AsyncSession) -> None:
+async def handle_activate(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
     parts = message.text.split(maxsplit=1) if message.text else []
     if len(parts) < 2:
-        await message.answer("Usage: /activate <card_code>")
+        await message.answer("Usage: /activate <card_code>", parse_mode=None)
         return
 
     code = parts[1].strip()
@@ -47,13 +60,14 @@ async def handle_activate(message: Message, db_user: User, session: AsyncSession
     try:
         subscription = await service.redeem_card(db_user, code)
     except CardNotFound:
-        await message.answer("Invalid or expired card code.")
+        await message.answer("Invalid or expired card code.", parse_mode=None)
         return
 
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
     await message.answer(
-        f"Activated plan {plan_name} until {subscription.expires_at:%Y-%m-%d}."
+        f"Activated plan {plan_name} until {subscription.expires_at:%Y-%m-%d}.",
+        parse_mode=None,
     )
 
 
@@ -61,9 +75,11 @@ async def handle_activate(message: Message, db_user: User, session: AsyncSession
 async def handle_chat(
     message: Message,
     session: AsyncSession,
-    db_user: User,
     agent: AgentOrchestrator,
+    db_user: User | None = None,
 ) -> None:
+    if db_user is None:
+        return
     conversation_service = ConversationService(session)
     memory_service = MemoryService(session)
 
@@ -98,7 +114,7 @@ async def handle_chat(
             memory_service=memory_service,
         )
     except Exception as exc:
-        await message.answer("Agent failed to respond. Please try again later.")
+        await message.answer("Agent failed to respond. Please try again later.", parse_mode=None)
         raise exc
 
     fragments = list(iter_fragments(assistant_text))

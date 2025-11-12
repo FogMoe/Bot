@@ -44,7 +44,9 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    BOT_LLM__API_KEY=sk-...
    ```
 
-4. 使用轮询模式运行机器人：
+4. 如需通过代理访问 Telegram，可在 `.env` 中设置 `BOT_TELEGRAM_PROXY`（支持 http/https/socks5 URL）；留空表示直连。
+
+5. 使用轮询模式运行机器人：
 
    ```bash
    python -m app.main

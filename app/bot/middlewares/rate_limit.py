@@ -29,7 +29,9 @@ class RateLimitMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         session: AsyncSession = data["session"]
-        user: User = data["db_user"]
+        user: User | None = data.get("db_user")
+        if user is None:
+            return await handler(event, data)
 
         subscription_service = SubscriptionService(session, self.settings)
         hourly_limit = await subscription_service.get_hourly_limit(user)
@@ -40,7 +42,8 @@ class RateLimitMiddleware(BaseMiddleware):
                 await limiter.increment(user, hourly_limit)
             except RateLimitExceeded:
                 await event.answer(
-                    "Hourly quota reached. Upgrade with /activate to increase your limit."
+                    "Hourly quota reached. Upgrade with /activate to increase your limit.",
+                    parse_mode=None,
                 )
                 return None
 
