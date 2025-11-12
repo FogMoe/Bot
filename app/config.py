@@ -18,6 +18,8 @@ class DatabaseSettings(BaseModel):
     pool_size: int = Field(default=5, ge=1, le=50)
     max_overflow: int = Field(default=10, ge=0, le=100)
     echo: bool = False
+    pool_recycle: int = Field(default=3600, ge=30)
+    pool_pre_ping: bool = Field(default=True)
 
 
 class RedisSettings(BaseModel):

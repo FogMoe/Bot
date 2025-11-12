@@ -27,6 +27,8 @@ class Database:
                 echo=db_cfg.echo,
                 pool_size=db_cfg.pool_size,
                 max_overflow=db_cfg.max_overflow,
+                pool_recycle=db_cfg.pool_recycle,
+                pool_pre_ping=db_cfg.pool_pre_ping,
             )
             self._session_factory = async_sessionmaker(
                 bind=self._engine,

@@ -144,7 +144,10 @@ async def handle_chat(
 
     fragments = list(iter_fragments(agent_result))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
-        await message.answer(formatted_fragment, parse_mode="MarkdownV2")
+        try:
+            await message.answer(formatted_fragment, parse_mode="MarkdownV2")
+        except Exception:
+            await message.answer(plain_fragment, parse_mode=None)
         await conversation_service.add_message(
             conversation,
             user=None,
