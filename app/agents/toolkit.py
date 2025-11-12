@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
-
 from app.services.search import SearchService
 
 
@@ -69,4 +68,9 @@ class ToolRegistry:
         return tuple(template.build() for template in self._templates)
 
 
-__all__ = ["ToolRegistry", "ToolTemplate", "SearchToolInput", "SearchToolOutput"]
+__all__ = [
+    "ToolRegistry",
+    "ToolTemplate",
+    "SearchToolInput",
+    "SearchToolOutput",
+]

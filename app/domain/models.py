@@ -37,19 +37,9 @@ class MessageModel(BaseModel):
     sent_at: datetime
 
 
-class ToolInvocationModel(BaseModel):
-    id: int | None = None
-    tool_name: str
-    input_payload: dict | None = None
-    output_payload: dict | None = None
-    status: Literal["pending", "running", "succeeded", "failed"] = "pending"
-    latency_ms: int | None = None
-
-
 __all__ = [
     "UserModel",
     "UsageQuotaModel",
     "SubscriptionPlanModel",
     "MessageModel",
-    "ToolInvocationModel",
 ]

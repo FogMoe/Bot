@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -9,15 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
+from app.config import get_settings
 from app.db.models.core import SubscriptionPlan, User
+from app.domain.models import MessageModel
+from app.i18n import I18nService
 from app.services.conversations import ConversationService
+from app.services.exceptions import CardNotFound
 from app.services.memory import MemoryService
 from app.services.subscriptions import SubscriptionService
 from app.utils.tokens import estimate_tokens
-from app.domain.models import MessageModel
-from app.services.exceptions import CardNotFound
 
 router = Router()
+settings = get_settings()
 
 
 @router.message(CommandStart())
@@ -28,6 +33,8 @@ async def handle_start(
 ) -> None:
     if db_user is None:
         return
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
     subscription_service = SubscriptionService(session)
     subscription = await subscription_service.get_active_subscription(db_user)
     plan_name = "Free"
@@ -35,11 +42,13 @@ async def handle_start(
         plan = await session.get(SubscriptionPlan, subscription.plan_id)
         if plan:
             plan_name = plan.name
-    reply_text = (
-        f"Hello, {message.from_user.full_name}!\n"
-        f"Current plan: {plan_name}. Use /activate <card_code> to upgrade."
+    greeting = await i18n.gettext(
+        "start.greeting",
+        locale=locale,
+        name=message.from_user.full_name,
+        plan=plan_name,
     )
-    await message.answer(reply_text, parse_mode=None)
+    await message.answer(greeting, parse_mode=None)
 
 
 @router.message(Command("activate"))
@@ -50,9 +59,14 @@ async def handle_activate(
 ) -> None:
     if db_user is None:
         return
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
     parts = message.text.split(maxsplit=1) if message.text else []
     if len(parts) < 2:
-        await message.answer("Usage: /activate <card_code>", parse_mode=None)
+        await message.answer(
+            await i18n.gettext("activate.usage", locale=locale),
+            parse_mode=None,
+        )
         return
 
     code = parts[1].strip()
@@ -60,13 +74,21 @@ async def handle_activate(
     try:
         subscription = await service.redeem_card(db_user, code)
     except CardNotFound:
-        await message.answer("Invalid or expired card code.", parse_mode=None)
+        await message.answer(
+            await i18n.gettext("activate.invalid", locale=locale),
+            parse_mode=None,
+        )
         return
 
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
     await message.answer(
-        f"Activated plan {plan_name} until {subscription.expires_at:%Y-%m-%d}.",
+        await i18n.gettext(
+            "activate.success",
+            locale=locale,
+            plan=plan_name,
+            date=subscription.expires_at.strftime("%Y-%m-%d"),
+        ),
         parse_mode=None,
     )
 
@@ -82,6 +104,8 @@ async def handle_chat(
         return
     conversation_service = ConversationService(session)
     memory_service = MemoryService(session)
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
     user_text = message.text or ""
@@ -107,17 +131,20 @@ async def handle_chat(
     ]
 
     try:
-        assistant_text = await agent.run(
+        agent_result = await agent.run(
             user_id=db_user.id,
             conversation_id=conversation.id,
             messages=history_models,
             memory_service=memory_service,
         )
     except Exception as exc:
-        await message.answer("Agent failed to respond. Please try again later.", parse_mode=None)
+        await message.answer(
+            await i18n.gettext("chat.agent_error", locale=locale),
+            parse_mode=None,
+        )
         raise exc
 
-    fragments = list(iter_fragments(assistant_text))
+    fragments = list(iter_fragments(agent_result))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
         await message.answer(formatted_fragment, parse_mode="MarkdownV2")
         await conversation_service.add_message(

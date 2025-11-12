@@ -154,40 +154,6 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     CONSTRAINT fk_agent_runs_trigger_message FOREIGN KEY (trigger_message_id) REFERENCES messages(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS tool_catalog (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(64) NOT NULL,
-    display_name VARCHAR(128) NULL,
-    category VARCHAR(64) NULL,
-    version VARCHAR(32) NULL,
-    config JSON NULL,
-    enabled TINYINT(1) NOT NULL DEFAULT 1,
-    requires_secret TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_tool_catalog_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS tool_invocations (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    agent_run_id BIGINT UNSIGNED NOT NULL,
-    tool_id BIGINT UNSIGNED NOT NULL,
-    sequence_no SMALLINT UNSIGNED NOT NULL,
-    input_payload JSON NULL,
-    output_payload JSON NULL,
-    status ENUM('pending','running','succeeded','failed') NOT NULL DEFAULT 'pending',
-    latency_ms INT UNSIGNED NULL,
-    cost DECIMAL(12,6) NULL,
-    error_message TEXT NULL,
-    output_message_id BIGINT UNSIGNED NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP NULL,
-    KEY idx_tool_invocations_run (agent_run_id),
-    KEY idx_tool_invocations_tool (tool_id),
-    CONSTRAINT fk_tool_invocations_run FOREIGN KEY (agent_run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
-    CONSTRAINT fk_tool_invocations_tool FOREIGN KEY (tool_id) REFERENCES tool_catalog(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_tool_invocations_message FOREIGN KEY (output_message_id) REFERENCES messages(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS long_term_memories (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -262,17 +228,6 @@ CREATE TABLE IF NOT EXISTS redis_cache_hooks (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_redis_cache_hooks_pattern (cache_key_pattern)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS i18n_strings (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    locale VARCHAR(8) NOT NULL,
-    namespace VARCHAR(64) NOT NULL,
-    string_key VARCHAR(128) NOT NULL,
-    content TEXT NOT NULL,
-    description TEXT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_i18n_strings_locale_key (locale, namespace, string_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS audit_logs (

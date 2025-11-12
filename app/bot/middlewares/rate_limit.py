@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BotSettings, get_settings
 from app.db.models.core import User
+from app.i18n import I18nService
 from app.services.exceptions import RateLimitExceeded
 from app.services.rate_limit import RateLimiter
 from app.services.subscriptions import SubscriptionService
@@ -41,8 +42,10 @@ class RateLimitMiddleware(BaseMiddleware):
             try:
                 await limiter.increment(user, hourly_limit)
             except RateLimitExceeded:
+                i18n = I18nService(default_locale=self.settings.default_language)
+                locale = user.language_code or self.settings.default_language
                 await event.answer(
-                    "Hourly quota reached. Upgrade with /activate to increase your limit.",
+                    await i18n.gettext("limit.exceeded", locale=locale),
                     parse_mode=None,
                 )
                 return None

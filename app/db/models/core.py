@@ -252,55 +252,6 @@ class AgentRun(Base):
 
     conversation: Mapped[Conversation] = relationship()
     trigger_message: Mapped[Message | None] = relationship()
-    tool_invocations: Mapped[list["ToolInvocation"]] = relationship(back_populates="agent_run")
-
-
-class ToolCatalog(Base):
-    __tablename__ = "tool_catalog"
-    __table_args__ = (UniqueConstraint("name", name="uq_tool_catalog_name"),)
-
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
-    display_name: Mapped[str | None] = mapped_column(String(128))
-    category: Mapped[str | None] = mapped_column(String(64))
-    version: Mapped[str | None] = mapped_column(String(32))
-    config: Mapped[dict | None] = mapped_column(JSON)
-    enabled: Mapped[bool] = mapped_column(default=True)
-    requires_secret: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
-    invocations: Mapped[list["ToolInvocation"]] = relationship(back_populates="tool")
-
-
-class ToolInvocation(Base):
-    __tablename__ = "tool_invocations"
-
-    agent_run_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False
-    )
-    tool_id: Mapped[int] = mapped_column(ForeignKey("tool_catalog.id", ondelete="RESTRICT"))
-    sequence_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    input_payload: Mapped[dict | None] = mapped_column(JSON)
-    output_payload: Mapped[dict | None] = mapped_column(JSON)
-    status: Mapped[str] = mapped_column(
-        Enum("pending", "running", "succeeded", "failed", name="tool_status"),
-        default="pending",
-        nullable=False,
-    )
-    latency_ms: Mapped[int | None] = mapped_column(Integer)
-    cost: Mapped[float | None] = mapped_column()
-    error_message: Mapped[str | None] = mapped_column(Text)
-    output_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("messages.id", ondelete="SET NULL")
-    )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
-
-    agent_run: Mapped[AgentRun] = relationship(back_populates="tool_invocations")
-    tool: Mapped[ToolCatalog] = relationship(back_populates="invocations")
-    output_message: Mapped[Message | None] = relationship()
 
 
 class LongTermMemory(Base):
@@ -422,22 +373,6 @@ class RedisCacheHook(Base):
     )
 
 
-class I18NString(Base):
-    __tablename__ = "i18n_strings"
-    __table_args__ = (
-        UniqueConstraint("locale", "namespace", "string_key", name="uq_i18n_strings_locale_key"),
-    )
-
-    locale: Mapped[str] = mapped_column(String(8), nullable=False)
-    namespace: Mapped[str] = mapped_column(String(64), nullable=False)
-    string_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-
-
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -460,13 +395,10 @@ __all__ = [
     "Conversation",
     "Message",
     "AgentRun",
-    "ToolCatalog",
-    "ToolInvocation",
     "LongTermMemory",
     "MemoryChunk",
     "MemoryCompression",
     "VectorIndexSnapshot",
     "RedisCacheHook",
-    "I18NString",
     "AuditLog",
 ]

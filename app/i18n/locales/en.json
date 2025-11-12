@@ -1,0 +1,8 @@
+{
+  "start.greeting": "Hello, {name}!\nCurrent plan: {plan}. Use /activate <card_code> to upgrade.",
+  "activate.usage": "Usage: /activate <card_code>",
+  "activate.invalid": "Invalid or expired card code.",
+  "activate.success": "Activated plan {plan} until {date}.",
+  "limit.exceeded": "Hourly quota reached. Upgrade with /activate to increase your limit.",
+  "chat.agent_error": "Agent failed to respond. Please try again later."
+}

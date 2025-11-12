@@ -24,10 +24,12 @@ def build_message_history(messages: Iterable[MessageModel]) -> List[ModelMessage
         if not content:
             continue
 
-        if item.role == ROLE_ASSISTANT or item.role == "tool":
+        if item.role == ROLE_ASSISTANT:
             history.append(ModelResponse(parts=[TextPart(content=content)]))
         elif item.role == ROLE_SYSTEM:
             history.append(ModelRequest(parts=[SystemPromptPart(content=content)]))
+        elif item.role == "tool":
+            continue
         else:  # default to user
             history.append(ModelRequest(parts=[UserPromptPart(content=content)]))
 
