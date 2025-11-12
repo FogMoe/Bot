@@ -4,5 +4,6 @@
   "activate.invalid": "Invalid or expired card code.",
   "activate.success": "Activated plan {plan} until {date}.",
   "limit.exceeded": "Hourly quota reached. Upgrade with /activate to increase your limit.",
-  "chat.agent_error": "Agent failed to respond. Please try again later."
+  "chat.agent_error": "Agent failed to respond. Please try again later.",
+  "media.unsupported": "Received a {kind}, currently only text is supported. We've logged it for future processing."
 }

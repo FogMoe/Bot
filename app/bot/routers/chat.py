@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -157,3 +155,106 @@ async def handle_chat(
             reply_to=db_message if idx == 0 else None,
             delivered_fragment_index=idx,
         )
+async def _handle_non_text(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None,
+    kind: str,
+) -> None:
+    if db_user is None:
+        return
+    conversation_service = ConversationService(session)
+    conversation = await conversation_service.get_or_create_active_conversation(db_user)
+    payload = _format_non_text_payload(kind, message)
+    await conversation_service.add_message(
+        conversation,
+        user=db_user,
+        role="user",
+        content_markdown=payload,
+        content_plain=payload,
+        token_count=estimate_tokens(payload),
+    )
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
+    await message.answer(
+        i18n.gettext("media.unsupported", locale=locale, kind=kind),
+        parse_mode=None,
+    )
+
+
+def _format_non_text_payload(kind: str, message: Message) -> str:
+    parts = [f"[{kind.upper()}]"]
+    if message.caption:
+        parts.append(f"caption={message.caption}")
+    if message.photo:
+        parts.append(f"file_id={message.photo[-1].file_id}")
+    if message.document:
+        parts.append(f"file_id={message.document.file_id}")
+    if message.video:
+        parts.append(f"file_id={message.video.file_id}")
+    if message.voice:
+        parts.append(f"file_id={message.voice.file_id}")
+    if message.audio:
+        parts.append(f"file_id={message.audio.file_id}")
+    if message.sticker:
+        parts.append(f"sticker={message.sticker.file_unique_id}")
+    if message.animation:
+        parts.append(f"animation={message.animation.file_id}")
+    if message.location:
+        parts.append(f"location=({message.location.latitude},{message.location.longitude})")
+    if message.contact:
+        parts.append(f"contact={message.contact.phone_number}")
+    if message.poll:
+        parts.append("poll=received")
+    return " ".join(parts)
+
+
+@router.message(F.photo)
+async def handle_photo(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="photo")
+
+
+@router.message(F.document)
+async def handle_document(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="document")
+
+
+@router.message(F.video)
+async def handle_video(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="video")
+
+
+@router.message(F.voice)
+@router.message(F.audio)
+async def handle_audio(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="audio")
+
+
+@router.message(F.sticker)
+async def handle_sticker(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="sticker")
+
+
+@router.message(F.animation)
+async def handle_animation(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="animation")
+
+
+@router.message(F.location)
+async def handle_location(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="location")
+
+
+@router.message(F.contact)
+async def handle_contact(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="contact")
+
+
+@router.message(F.poll)
+async def handle_poll(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="poll")
+
+
+@router.message(F.game)
+async def handle_game(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
+    await _handle_non_text(message, session, db_user, kind="game")
