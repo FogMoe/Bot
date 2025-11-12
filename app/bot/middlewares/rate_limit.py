@@ -45,7 +45,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 i18n = I18nService(default_locale=self.settings.default_language)
                 locale = user.language_code or self.settings.default_language
                 await event.answer(
-                    await i18n.gettext("limit.exceeded", locale=locale),
+                    i18n.gettext("limit.exceeded", locale=locale),
                     parse_mode=None,
                 )
                 return None

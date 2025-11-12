@@ -42,7 +42,7 @@ async def handle_start(
         plan = await session.get(SubscriptionPlan, subscription.plan_id)
         if plan:
             plan_name = plan.name
-    greeting = await i18n.gettext(
+    greeting = i18n.gettext(
         "start.greeting",
         locale=locale,
         name=message.from_user.full_name,
@@ -64,7 +64,7 @@ async def handle_activate(
     parts = message.text.split(maxsplit=1) if message.text else []
     if len(parts) < 2:
         await message.answer(
-            await i18n.gettext("activate.usage", locale=locale),
+            i18n.gettext("activate.usage", locale=locale),
             parse_mode=None,
         )
         return
@@ -75,7 +75,7 @@ async def handle_activate(
         subscription = await service.redeem_card(db_user, code)
     except CardNotFound:
         await message.answer(
-            await i18n.gettext("activate.invalid", locale=locale),
+            i18n.gettext("activate.invalid", locale=locale),
             parse_mode=None,
         )
         return
@@ -83,7 +83,7 @@ async def handle_activate(
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
     await message.answer(
-        await i18n.gettext(
+        i18n.gettext(
             "activate.success",
             locale=locale,
             plan=plan_name,
@@ -139,7 +139,7 @@ async def handle_chat(
         )
     except Exception as exc:
         await message.answer(
-            await i18n.gettext("chat.agent_error", locale=locale),
+            i18n.gettext("chat.agent_error", locale=locale),
             parse_mode=None,
         )
         raise exc
