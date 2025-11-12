@@ -1,14 +1,40 @@
-"""Tools wired into the Pydantic AI agent."""
+"""Tool registry and reusable templates for pydantic-ai."""
 
 from __future__ import annotations
 
-from typing import Callable, Iterable
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Iterable, Protocol
 
-from pydantic import BaseModel
-from pydantic_ai import RunContext
+from pydantic import BaseModel, Field
+from pydantic_ai import RunContext, Tool
+
+from app.services.search import SearchService
+
+
+class ToolHandler(Protocol):
+    async def __call__(self, ctx: RunContext, data: BaseModel) -> object: ...
+
+
+@dataclass(slots=True)
+class ToolTemplate:
+    """Declarative metadata for registering a tool with the agent."""
+
+    handler: ToolHandler
+    name: str
+    description: str
+    takes_ctx: bool = True
+
+    def build(self) -> Tool:
+        return Tool(
+            self.handler,
+            name=self.name,
+            description=self.description,
+            takes_ctx=self.takes_ctx,
+        )
+
 
 class SearchToolInput(BaseModel):
-    query: str
+    query: str = Field(..., description="Natural language keywords or phrase to search for")
 
 
 class SearchToolOutput(BaseModel):
@@ -16,26 +42,31 @@ class SearchToolOutput(BaseModel):
 
 
 async def search_tool(ctx: RunContext, data: SearchToolInput) -> SearchToolOutput:
-    """Placeholder search tool that can be replaced later."""
+    """Adapter that delegates to SearchService."""
 
-    query = data.query.strip()
-    if not query:
-        return SearchToolOutput(results=[])
-    # Dummy implementation until real search provider is wired in.
-    return SearchToolOutput(
-        results=[f"Search result placeholder for: {query}"]
-    )
+    service = SearchService(ctx.deps.http_client)
+    results = await service.search(data.query)
+    return SearchToolOutput(results=list(results))
 
 
-ToolCallable = Callable[[RunContext, BaseModel], object]
+DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
+    ToolTemplate(
+        handler=search_tool,
+        name="web_search",
+        description="Perform a lightweight web-style search and return short snippets.",
+    ),
+)
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
-        self._tools: list[Callable] = [search_tool]
+    def __init__(self, presets: Iterable[ToolTemplate] | None = None) -> None:
+        self._templates: list[ToolTemplate] = list(presets or DEFAULT_TOOLS)
 
-    def register(self, tool_callable: Callable) -> None:
-        self._tools.append(tool_callable)
+    def register(self, template: ToolTemplate) -> None:
+        self._templates.append(template)
 
-    def iter_tools(self) -> Iterable[Callable]:
-        return tuple(self._tools)
+    def iter_tools(self) -> Iterable[Tool]:
+        return tuple(template.build() for template in self._templates)
+
+
+__all__ = ["ToolRegistry", "ToolTemplate", "SearchToolInput", "SearchToolOutput"]

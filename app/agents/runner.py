@@ -10,6 +10,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.azure import AzureProvider
 
+from app.agents.history import build_message_history
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, get_settings
 from app.domain.models import MessageModel
@@ -67,15 +68,12 @@ def build_agent(
             ctx.deps.user_id, limit=5
         )
         memory_lines = "\n".join(f"- {m.content}" for m in memories) or "None"
-        history_lines = "\n".join(
-            f"{message.role}: {message.content}" for message in ctx.deps.recent_messages
-        )
         return (
             "You are chatting in Telegram. "
             "If AI output contains newline characters, respond with numbered paragraphs "
             "unless text is wrapped in triple backticks.\n"
-            f"Known user memories:\n{memory_lines}\n\n"
-            f"Recent conversation:\n{history_lines}"
+            "Always mention tools you relied on.\n"
+            f"Known user memories:\n{memory_lines}"
         )
 
     return agent
@@ -96,6 +94,12 @@ class AgentOrchestrator:
         messages: Sequence[MessageModel],
         memory_service: MemoryService,
     ) -> str:
+        if not messages:
+            raise ValueError("messages list must contain at least one user turn")
+
+        prior_messages = build_message_history(messages[:-1])
+        latest_message = messages[-1]
+
         async with httpx.AsyncClient(timeout=30) as client:
             deps = AgentDependencies(
                 user_id=user_id,
@@ -105,7 +109,8 @@ class AgentOrchestrator:
                 recent_messages=messages,
             )
             result = await self.agent.run(
-                messages[-1].content if messages else "",
+                latest_message.content,
                 deps=deps,
+                message_history=prior_messages,
             )
             return result.output
