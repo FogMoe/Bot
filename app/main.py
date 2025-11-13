@@ -20,6 +20,7 @@ from app.bot.routers import setup_routers
 from app.config import get_settings
 from app.db.session import Database
 from app.logging import configure_logging, logger
+from app.services.seeds import ensure_subscription_plans
 
 
 async def main() -> None:
@@ -43,6 +44,10 @@ async def main() -> None:
     dp.include_router(setup_routers())
 
     database = Database(settings=settings)
+
+    # Seed subscription plans before starting services
+    async with database.session() as seed_session:
+        await ensure_subscription_plans(seed_session, settings)
     dp.update.outer_middleware(DbSessionMiddleware(database))
     dp.message.middleware(ThrottleMiddleware(settings))
     dp.message.middleware(UserContextMiddleware())
