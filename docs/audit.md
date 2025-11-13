@@ -136,7 +136,7 @@ BOT_REQUEST_LIMIT__* 配置存在但未使用 (应该是 ThrottleMiddleware 使�
 9. 🧪 测试缺失（✅ 持续补齐）
 问题：项目中没有任何测试文件
 
-现状：已新增 `tests/test_subscriptions.py`、`tests/test_rate_limit.py`、`tests/test_cards.py`、`tests/test_conversations.py`、`tests/test_memory.py`、`tests/test_tokens.py`、`tests/test_search.py`、`tests/test_i18n.py`、`tests/test_main.py` 以及端到端 `tests/test_integration.py`，覆盖默认/升级订阅、卡密叠加、配额窗口清理、对话归档、记忆服务、搜索工具、i18n、日志与整体链路。当前 `pytest --cov=app` 覆盖率约 67%，后续仍需在 bot 交互、中间件与代理层补充场景测试。
+现状：已新增 `tests/test_subscriptions.py`、`tests/test_rate_limit.py`、`tests/test_cards.py`、`tests/test_conversations.py`、`tests/test_memory.py`、`tests/test_tokens.py`、`tests/test_search.py`、`tests/test_i18n.py`、`tests/test_main.py`、`tests/test_middlewares.py`、`tests/test_chat_router.py`、`tests/test_db_session.py` 等，并保留端到端 `tests/test_integration.py`。覆盖范围扩展至默认/升级订阅、卡密叠加、配额窗口清理、对话归档、记忆服务、搜索工具、i18n、日志、Telegram 中间件与聊天命令。当前 `pytest --cov=app` 覆盖率约 80%，后续可继续强化 bot router 其余命令及 seeds/db session 等模块。
 10. 📚 文档不一致
 问题 10.1：README 与代码不符
 问题：README 说"每小时 5 条 vs 50 条消息"，但数据库 seed 是 10/50/200
