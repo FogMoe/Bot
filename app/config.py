@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Literal
 import os
 
-from pydantic import BaseModel, Field, HttpUrl, SecretStr
+from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -68,6 +68,16 @@ class RequestLimitSettings(BaseModel):
     window_retention_hours: int = Field(default=48, ge=1, le=168)
 
 
+class ExternalToolSettings(BaseModel):
+    serpapi_api_key: SecretStr | None = None
+    serpapi_engine: str = Field(default="google_light", min_length=1)
+    jina_reader_base_url: AnyHttpUrl = Field(default="https://r.jina.ai/")
+    judge0_api_url: AnyHttpUrl | None = None
+    judge0_api_key: SecretStr | None = None
+    judge0_language_id: int = Field(default=71, ge=1)
+    request_timeout_seconds: int = Field(default=10, ge=1, le=60)
+
+
 class ZaiSettings(BaseModel):
     base_url: HttpUrl | None = None
     api_key: SecretStr | None = None
@@ -95,6 +105,7 @@ class BotSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    external_tools: ExternalToolSettings = Field(default_factory=ExternalToolSettings)
     zai: ZaiSettings | None = None
     subscriptions: SubscriptionSettings = Field(default_factory=SubscriptionSettings)
     request_limit: RequestLimitSettings = Field(default_factory=RequestLimitSettings)
@@ -110,4 +121,4 @@ def get_settings() -> BotSettings:
     return BotSettings()  # type: ignore[call-arg]
 
 
-__all__ = ["BotSettings", "get_settings"]
+__all__ = ["BotSettings", "ExternalToolSettings", "get_settings"]

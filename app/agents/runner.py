@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 import httpx
@@ -15,7 +15,7 @@ from pydantic_ai.messages import ModelMessage
 
 from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
-from app.config import BotSettings, get_settings
+from app.config import BotSettings, ExternalToolSettings, get_settings
 from app.services.memory import MemoryService
 from app.utils.datetime import utc_now
 
@@ -28,6 +28,7 @@ class AgentDependencies:
     memory_service: MemoryService
     history: Sequence[ModelMessage]
     prior_summary: str | None = None
+    tool_settings: ExternalToolSettings = field(default_factory=ExternalToolSettings)
 
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
@@ -174,6 +175,7 @@ class AgentOrchestrator:
                 memory_service=memory_service,
                 history=history,
                 prior_summary=prior_summary,
+                tool_settings=self.settings.external_tools,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):

@@ -6,6 +6,7 @@
 - 免费 / Pro / Max 三档配额（每小时 10 / 50 / 200 条），通过 MySQL 中的卡密激活；新用户落库时自动创建 FREE 订阅。
 - 模块化的逻辑/应用层，包含仓储层、服务层和路由层。
 - 通过 `pydantic-ai` 实现智能体响应，支持可插拔工具和长期记忆钩子。
+- 工具层统一通过服务注入：内置 SerpApi Google 搜索、Jina Reader 抓取网页、Judge0 远程 Python 代码执行。
 - MarkdownV2 格式输出，支持换行分割；所有业务时间戳均使用 UTC，Agent 调用具备 HTTP/协程双重超时保护。
 - 按小时限流期间，会依据 `BOT_REQUEST_LIMIT__WINDOW_RETENTION_HOURS` 自动清理过期窗口，防止 `usage_hourly_quota` 膨胀。
 - 内置 `pytest` 用例覆盖订阅默认化与速率限制逻辑，可运行 `pytest` 快速回归。
@@ -45,6 +46,8 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    BOT_DATABASE__DSN=mysql+asyncmy://bot:bot@localhost:3306/telegram_bot
    BOT_LLM__API_KEY=sk-...
    ```
+
+   如需启用工具调用的外部 API，请设置 `BOT_EXTERNAL_TOOLS__*` 相关变量（SerpApi、Jina Reader、Judge0）。默认值会保留占位，便于本地演示。
 
 4. 如需通过代理访问 Telegram，可在 `.env` 中设置 `BOT_TELEGRAM_PROXY`（支持 http/https/socks5 URL）；留空表示直连。
 
