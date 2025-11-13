@@ -35,6 +35,20 @@ class _AsyncSessionWrapper:
     async def close(self) -> None:
         self._sync.close()
 
+    async def rollback(self) -> None:
+        self._sync.rollback()
+
+
+class _AsyncContextManagerWrapper:
+    def __init__(self, cm):
+        self._cm = cm
+
+    async def __aenter__(self):
+        return self._cm.__enter__()
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return self._cm.__exit__(exc_type, exc, tb)
+
 
 @pytest_asyncio.fixture
 async def session():
