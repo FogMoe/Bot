@@ -32,6 +32,7 @@ class SubscriptionPlan(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     hourly_message_limit: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    priority: Mapped[int] = mapped_column(SmallInteger, default=0)
     monthly_price: Mapped[float] = mapped_column()
     is_default: Mapped[bool] = mapped_column(default=False)
     features: Mapped[dict | None] = mapped_column(JSON)
@@ -143,7 +144,9 @@ class UserSubscription(Base):
         default="active",
         nullable=False,
     )
+    priority: Mapped[int] = mapped_column(default=0)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime)
     notes: Mapped[str | None] = mapped_column(Text)
