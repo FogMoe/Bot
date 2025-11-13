@@ -31,6 +31,7 @@ class CollaboratorAgent:
             ),
             name="Collaborator",
             tools=(),
+            model_settings={"openai_reasoning_effort": "low"},
         )
         return cls(agent)
 
