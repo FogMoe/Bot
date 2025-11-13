@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.core import UsageHourlyQuota, User
 from app.services.exceptions import RateLimitExceeded
+from app.utils.datetime import utc_now
 
 
 def _current_window_start(now: datetime) -> datetime:
@@ -27,7 +28,7 @@ class RateLimiter:
         increment_messages: int = 1,
         increment_tools: int = 0,
     ) -> UsageHourlyQuota:
-        now = datetime.utcnow()
+        now = utc_now()
         window_start = _current_window_start(now)
 
         stmt = (

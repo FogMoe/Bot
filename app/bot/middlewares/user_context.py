@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
@@ -11,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.core import User
+from app.services.subscriptions import SubscriptionService
+from app.utils.datetime import utc_now
 
 
 class UserContextMiddleware(BaseMiddleware):
@@ -39,6 +40,9 @@ class UserContextMiddleware(BaseMiddleware):
             session.add(user)
             await session.flush()
 
-        user.last_seen_at = datetime.utcnow()
+            subscription_service = SubscriptionService(session)
+            await subscription_service.ensure_default_subscription(user)
+
+        user.last_seen_at = utc_now()
         data["db_user"] = user
         return await handler(event, data)

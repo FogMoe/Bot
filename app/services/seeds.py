@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BotSettings
 from app.db.models.core import SubscriptionPlan
+from app.utils.datetime import utc_now
 
 
 async def ensure_subscription_plans(session: AsyncSession, settings: BotSettings) -> None:
@@ -48,7 +47,7 @@ async def ensure_subscription_plans(session: AsyncSession, settings: BotSettings
         stmt = select(SubscriptionPlan).where(SubscriptionPlan.code == payload["code"])
         result = await session.execute(stmt)
         plan = result.scalar_one_or_none()
-        now = datetime.utcnow()
+        now = utc_now()
         if plan:
             plan.name = payload["name"]
             plan.description = payload["description"]

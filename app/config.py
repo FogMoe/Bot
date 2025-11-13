@@ -34,6 +34,7 @@ class LLMSettings(BaseModel):
     base_url: HttpUrl | None = None
     api_version: str | None = None
     context_window_tokens: int = Field(default=120_000, ge=1000)
+    request_timeout_seconds: int = Field(default=60, ge=5, le=600)
 
     def apply_environment(self) -> None:
         """Populate SDK-required environment vars from settings."""
@@ -88,6 +89,7 @@ class BotSettings(BaseSettings):
     default_language: str = "en"
     timezone: str = "UTC"
     admin_telegram_id: int | None = None
+    agent_timeout_seconds: int = Field(default=90, ge=5, le=600)
 
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

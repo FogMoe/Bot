@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Sequence
 
 import httpx
@@ -17,6 +17,7 @@ from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, get_settings
 from app.services.memory import MemoryService
+from app.utils.datetime import utc_now
 
 
 @dataclass
@@ -31,6 +32,7 @@ class AgentDependencies:
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
     provider = settings.llm.provider.lower()
+    request_timeout = settings.llm.request_timeout_seconds
     if provider in {"azure", "azure_openai"} or provider.startswith("azure"):
         if not settings.llm.base_url or not settings.llm.api_version or not settings.llm.api_key:
             raise ValueError(
@@ -41,10 +43,16 @@ def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
             api_version=settings.llm.api_version,
             api_key=settings.llm.api_key.get_secret_value(),
         )
-        return OpenAIChatModel(settings.llm.model, provider=azure_provider)
+        return OpenAIChatModel(
+            settings.llm.model,
+            provider=azure_provider,
+            request_timeout=request_timeout,
+        )
+
+    if provider in {"openai", "custom"}:
+        return OpenAIChatModel(settings.llm.model, request_timeout=request_timeout)
 
     provider_map = {
-        "openai": "openai",
         "anthropic": "anthropic",
         "custom": "openai",
     }
@@ -85,7 +93,7 @@ You are **FOGMOE**, a friendly AI assistant inside Telegram chats.
     @agent.instructions
     def current_time_instruction() -> str:
         """Expose the current UTC time as part of the instructions."""
-        current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        current_time = utc_now().strftime("%Y-%m-%d %H:%M UTC")
         return f"""\
 # System Info
 - ALWAYS answer using the time given in "System Info".
@@ -117,7 +125,8 @@ class AgentOrchestrator:
         if not latest_user_message:
             raise ValueError("latest_user_message must not be empty")
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        client_timeout = self.settings.llm.request_timeout_seconds
+        async with httpx.AsyncClient(timeout=client_timeout) as client:
             deps = AgentDependencies(
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -126,11 +135,17 @@ class AgentOrchestrator:
                 history=history,
                 prior_summary=prior_summary,
             )
-            result = await self.agent.run(
-                latest_user_message,
-                deps=deps,
-                message_history=list(history),
-            )
+            try:
+                async with asyncio.timeout(self.settings.agent_timeout_seconds):
+                    result = await self.agent.run(
+                        latest_user_message,
+                        deps=deps,
+                        message_history=list(history),
+                    )
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(
+                    f"Agent run exceeded {self.settings.agent_timeout_seconds} seconds"
+                ) from exc
             return result
 
     async def summarize_history(self, history: Sequence[ModelMessage]) -> str:

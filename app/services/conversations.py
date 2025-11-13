@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Awaitable, Callable, Sequence
 
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, ModelResponse, TextPart, UserPromptPart
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.core import Conversation, ConversationArchive, Message, User
 from app.utils.tokens import estimate_tokens
+from app.utils.datetime import utc_now
 
 ARCHIVE_TOKEN_THRESHOLD = 100_000
 RECENT_MESSAGE_LIMIT = 20
@@ -35,7 +35,7 @@ class ConversationService:
 
         conversation = Conversation(
             user_id=user.id,
-            title=f"Chat {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            title=f"Chat {utc_now().strftime('%Y-%m-%d %H:%M')}",
             context_tokens=0,
             status="active",
         )
@@ -176,7 +176,7 @@ class ConversationService:
             record.total_tokens = token_count
             record.message_count = message_count
 
-        conversation.last_interaction_at = datetime.utcnow()
+        conversation.last_interaction_at = utc_now()
         conversation.context_tokens = token_count
 
         await self.session.flush()

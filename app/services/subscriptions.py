@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import BotSettings, get_settings
 from app.db.models.core import SubscriptionCard, SubscriptionPlan, User, UserSubscription
 from app.services.exceptions import CardNotFound
+from app.utils.datetime import utc_now
 
 ACTIVE_STATUSES = {"active", "pending"}
 
@@ -21,7 +22,7 @@ class SubscriptionService:
         self.settings = settings or get_settings()
 
     async def get_active_subscription(self, user: User) -> UserSubscription | None:
-        now = datetime.utcnow()
+        now = utc_now()
         stmt = (
             select(UserSubscription)
             .where(
@@ -41,17 +42,51 @@ class SubscriptionService:
 
     async def get_hourly_limit(self, user: User) -> int:
         subscription = await self.get_active_subscription(user)
-        if subscription:
-            plan = await self.session.get(SubscriptionPlan, subscription.plan_id)
-            if plan:
-                return plan.hourly_message_limit
-        default_plan = await self._get_default_plan()
-        if default_plan:
-            return default_plan.hourly_message_limit
+        if not subscription:
+            subscription = await self.ensure_default_subscription(user)
+        plan = await self.session.get(SubscriptionPlan, subscription.plan_id)
+        if plan:
+            return plan.hourly_message_limit
         raise RuntimeError("No default subscription plan configured.")
 
+    async def ensure_default_subscription(self, user: User) -> UserSubscription:
+        """Make sure the user always has an active default plan record."""
+
+        default_plan = await self._get_default_plan()
+        if default_plan is None:
+            raise RuntimeError("No default subscription plan configured.")
+
+        stmt = select(UserSubscription).where(
+            UserSubscription.user_id == user.id,
+            UserSubscription.plan_id == default_plan.id,
+        )
+        result = await self.session.execute(stmt)
+        subscription = result.scalar_one_or_none()
+        now = utc_now()
+        if subscription is None:
+            subscription = UserSubscription(
+                user_id=user.id,
+                plan_id=default_plan.id,
+                status="active",
+                priority=default_plan.priority,
+                activated_at=now,
+                starts_at=now,
+                expires_at=None,
+            )
+            self.session.add(subscription)
+        else:
+            subscription.priority = default_plan.priority
+            if subscription.status != "active":
+                subscription.status = "active"
+                subscription.activated_at = subscription.activated_at or now
+                subscription.starts_at = subscription.starts_at or now
+            subscription.expires_at = None
+
+        await self.session.flush()
+        return subscription
+
     async def redeem_card(self, user: User, code: str) -> UserSubscription:
-        now = datetime.utcnow()
+        now = utc_now()
         card_stmt = (
             select(SubscriptionCard)
             .where(

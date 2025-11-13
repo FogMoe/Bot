@@ -20,8 +20,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.utils.datetime import utc_now
 
-timestamp = Annotated[datetime, mapped_column(DateTime, default=datetime.utcnow)]
+UTCDateTime = DateTime(timezone=True)
+timestamp = Annotated[datetime, mapped_column(UTCDateTime, default=utc_now)]
 
 
 class SubscriptionPlan(Base):
@@ -37,9 +39,9 @@ class SubscriptionPlan(Base):
     is_default: Mapped[bool] = mapped_column(default=False)
     features: Mapped[dict | None] = mapped_column(JSON)
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     subscriptions: Mapped[list["UserSubscription"]] = relationship(back_populates="plan")
@@ -66,10 +68,10 @@ class User(Base):
         nullable=False,
     )
     timezone: Mapped[str | None] = mapped_column(String(64))
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     settings: Mapped["UserSettings"] = relationship(back_populates="user", uselist=False)
@@ -94,7 +96,7 @@ class UserSettings(Base):
     notification_opt_in: Mapped[bool] = mapped_column(default=True)
     extra_settings: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     user: Mapped[User] = relationship(back_populates="settings")
@@ -111,19 +113,19 @@ class SubscriptionCard(Base):
         default="new",
         nullable=False,
     )
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     valid_days: Mapped[int | None] = mapped_column(Integer)
     redeemed_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
-    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    redeemed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON)
     created_by_admin_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     plan: Mapped[SubscriptionPlan] = relationship()
@@ -146,14 +148,14 @@ class UserSubscription(Base):
         nullable=False,
     )
     priority: Mapped[int] = mapped_column(default=0)
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime)
-    starts_at: Mapped[datetime | None] = mapped_column(DateTime)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    activated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    starts_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
@@ -168,13 +170,13 @@ class UsageHourlyQuota(Base):
     )
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    window_start: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     tool_call_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_reset_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    last_reset_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     user: Mapped[User] = relationship()
@@ -196,11 +198,11 @@ class Conversation(Base):
         default="in_sync",
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
-    last_interaction_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_interaction_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     user: Mapped[User] = relationship(back_populates="conversations")
     history: Mapped["Message"] = relationship(
@@ -223,10 +225,10 @@ class Message(Base):
     history: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     total_tokens: Mapped[int | None] = mapped_column(Integer)
     message_count: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
     )
 
     conversation: Mapped[Conversation] = relationship(back_populates="history")
@@ -243,7 +245,7 @@ class ConversationArchive(Base):
     summary_text: Mapped[str | None] = mapped_column(Text)
     history: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="archive")
     user: Mapped[User] = relationship()
@@ -268,8 +270,8 @@ class AgentRun(Base):
     token_usage_prompt: Mapped[int | None] = mapped_column(Integer)
     token_usage_completion: Mapped[int | None] = mapped_column(Integer)
     result_summary: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     conversation: Mapped[Conversation] = relationship()
     trigger_message: Mapped[Message | None] = relationship()
@@ -292,11 +294,11 @@ class LongTermMemory(Base):
     embedding_vector_id: Mapped[str | None] = mapped_column(String(191))
     token_estimate: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     user: Mapped[User] = relationship()
     conversation: Mapped[Conversation | None] = relationship()
@@ -321,9 +323,9 @@ class MemoryChunk(Base):
         default="raw",
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     conversation: Mapped[Conversation] = relationship()
@@ -346,9 +348,9 @@ class MemoryCompression(Base):
         default="pending",
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     chunk: Mapped[MemoryChunk] = relationship(back_populates="compression")
@@ -368,11 +370,11 @@ class VectorIndexSnapshot(Base):
         nullable=False,
     )
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     error_message: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
     memory: Mapped[LongTermMemory] = relationship()
@@ -386,11 +388,11 @@ class RedisCacheHook(Base):
     purpose: Mapped[str | None] = mapped_column(String(128))
     ttl_seconds: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[str | None] = mapped_column(String(32))
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, onupdate=datetime.utcnow
+        default=utc_now, onupdate=utc_now
     )
 
 
@@ -401,7 +403,7 @@ class AuditLog(Base):
     action_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_json: Mapped[dict | None] = mapped_column(JSON)
     ip_address: Mapped[str | None] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
     user: Mapped[User | None] = relationship()
 

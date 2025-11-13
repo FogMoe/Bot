@@ -2,12 +2,11 @@
 根据详细的代码审查，我发现了以下几类问题：
 
 1. ⚠️ 订阅系统逻辑问题
-问题 1.1：Free Plan 默认订阅缺失
-位置：subscriptions.py
+问题 1.1：Free Plan 默认订阅缺失（✅ 已修复）
+位置：subscriptions.py、user_context.py
 
 问题：get_hourly_limit() 方法在用户没有激活订阅时，回退到配置文件的 free_hourly_limit=5，但数据库中的 FREE plan 是 hourly_message_limit=10
-影响：配置与数据库不一致，可能导致用户配额混乱
-建议：应该为新用户自动创建 FREE plan 订阅，而不是依赖回退逻辑
+现状：新增 `SubscriptionService.ensure_default_subscription()`，在 `UserContextMiddleware` 初次建用户及 `get_hourly_limit()` 回退分支中自动写入 FREE 订阅，并伴随测试 `tests/test_subscriptions.py` 覆盖。
 问题 1.2：订阅优先级逻辑复杂且易错
 位置：subscriptions.py - _schedule_new_subscription() 方法
 
@@ -19,12 +18,10 @@
 问题：检查 card.expires_at > now 但没有处理 card.valid_days 为负数或 0 的情况
 建议：添加验证逻辑
 2. 🐛 速率限制和配额系统问题
-问题 2.1：时区不一致风险
+问题 2.1：时区不一致风险（✅ 已修复）
 位置：多处使用 datetime.utcnow()
 
-问题：配置中有 timezone 设置但未使用；所有 datetime.utcnow() 应该改为 datetime.now(timezone.utc) (Python 3.11+)
-影响：可能导致不同时区用户的配额窗口计算错误
-建议：统一使用 timezone-aware datetime
+现状：新增 `app/utils/datetime.py::utc_now()`，并在 ORM 模型与 service 层统一引用带 tzinfo 的时间；数据库列改为 `DateTime(timezone=True)`，避免配额与订阅窗口出现时区偏差。
 问题 2.2：配额窗口重置逻辑缺失
 位置：rate_limit.py
 
@@ -110,11 +107,10 @@ prior_summary 加载但未传递给 agent (在 runner.py 中 deps.prior_summary 
 位置：db_session.py (未审阅)
 
 建议：确保所有异常情况下会话都能正确关闭
-问题 6.3：Agent 超时未设置
+问题 6.3：Agent 超时未设置（✅ 已修复）
 位置：runner.py - run() 方法
 
-问题：agent.run() 没有超时设置，LLM 调用可能无限挂起
-建议：添加 asyncio.timeout() 或在 model settings 中设置 timeout
+现状：`BotSettings` 新增 `agent_timeout_seconds` 与 `llm.request_timeout_seconds`，`AgentOrchestrator.run()` 通过 `asyncio.timeout()` 与 `httpx`/`OpenAIChatModel` 的 request timeout 共同限制上限，超时时会抛出明确错误。
 7. 📦 配置和环境问题
 问题 7.1：环境变量应用时机不确定
 位置：config.py - LLMSettings.apply_environment()
@@ -155,11 +151,11 @@ Token 估算准确性
 建议：添加订阅激活流程图、配额检查流程图
 📋 优先级建议
 🔴 高优先级（核心功能缺陷）
-修复订阅系统的 FREE plan 默认分配逻辑
+~~修复订阅系统的 FREE plan 默认分配逻辑~~（✅ v0.1.1）
 实现 prior_summary 在 agent 中的使用
-修复时区相关的时间计算
+~~修复时区相关的时间计算~~（✅ v0.1.1）
 实现搜索工具（或移除）
-添加 agent 超时保护
+~~添加 agent 超时保护~~（✅ v0.1.1）
 🟡 中优先级（功能完善）
 实现 agent_runs 日志记录
 添加配额窗口清理逻辑

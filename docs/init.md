@@ -2,14 +2,14 @@
 
 ## 当前能力概览
 
-- **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、按小时限流。
 - **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、全局节流（短周期请求限流）与按小时限流。
-- **订阅/配额**：支持卡密激活，`user_subscriptions` 记录每次订阅。小时额度随计划自动调整，过期后回退到免费额度。
+- **订阅/配额**：支持卡密激活，`UserContextMiddleware` 在首次写入用户时会自动创建 FREE 订阅；`get_hourly_limit()` 也会兜底确保数据库中始终有默认计划。小时额度读取自计划（FREE=10、PRO=50、MAX=200），过期后回退到 FREE 记录。
+- **时间体系**：统一通过 `utc_now()` 与 `DateTime(timezone=True)` 记录时间戳，确保配额、订阅和会话窗口不会受本地时区影响。
 - **Agent 架构**：
   - 主 Agent (`AgentOrchestrator`) 负责与用户对话，使用 pydantic-ai，并可调用工具。
   - 工具通过 `ToolTemplate` 注册，实际业务逻辑放在 service 层（如 `SearchService`）。工具调用历史由 pydantic-ai 原生机制管理，并写入 `messages` 以供短期上下文。
   - 对话上下文：`messages` 表存“摘要（通过 deps 注入）+ 最近 20 条”短期记录；若总 token ≥ 100k，会把 `result.all_messages()` 全量写入 `conversation_archives`，触发 ZAI 摘要 Agent（输出限制 ~2000 tokens），并把摘要保存在同一表中。
-  - 主 Agent 每次 run 会通过 `deps` 获取最近一次摘要，从而在开头引用“上次对话总结”。
+  - 主 Agent 调用 `agent.run()` 时包裹 `asyncio.timeout(settings.agent_timeout_seconds)` 并设置 LLM HTTP 请求时限，防止卡死。
   - 长期记忆：表结构和 `MemoryService` 已就绪，但尚未实现自动提取/压缩。
 - **i18n**：使用 `app/i18n/locales/<locale>.json` 的结构化文案。`I18nService` 负责加载与缓存，默认语言 en，可按用户 `language_code` 切换。
 - **数据库**：MySQL 8，`db/schema.sql` 与 SQLAlchemy 模型同步。已清理未使用的 `tool_catalog`、`tool_invocations`、`i18n_strings`。
@@ -51,7 +51,7 @@
 - **记忆体系**：长期记忆触发尚未实现，可在 `MemoryService` 上扩展（如监听 `context_tokens` 超限或特定关键词时写入）。
 - **订阅续费/通知**：如需严格到期处理，可添加定时任务将过期订阅 `status` 改为 `expired` 并通知用户。
 - **i18n**：要新增语言，只需在 `app/i18n/locales/` 添加 `<locale>.json`，注意键名统一。若需在线更新，可再扩展文件热加载或后台接口。
-- **测试**：建议为 service 层（订阅、额度、记忆、搜索）和新的 `all_messages` 序列化/持久化逻辑补充单元测试，确保后续 refactor 时行为稳定。
+- **测试**：已添加订阅自动降级/默认逻辑的异步测试 `tests/test_subscriptions.py`，建议继续扩展至配额、记忆等核心服务，确保后续 refactor 时行为稳定。
 - **非文本消息处理**：目前仅做占位记录（回复“暂不支持”），后续若要真正处理图片/语音等，应完善持久化结构与业务逻辑。
 - **系统消息/错误写入**：可根据需要在异常处写入 `role="system"` 的消息，供下一轮 Agent 读取；当前实现尚未自动记录错误。
 - **消息压缩/清理**：`messages` 会无限增长。利用 `memory_chunks`/`memory_compressions` 压缩旧对话并删除原记录，是后续必须实现的 TODO。
