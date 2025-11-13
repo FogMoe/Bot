@@ -45,8 +45,10 @@ class SubscriptionService:
             plan = await self.session.get(SubscriptionPlan, subscription.plan_id)
             if plan:
                 return plan.hourly_message_limit
-        # fallback
-        return self.settings.subscriptions.free_hourly_limit
+        default_plan = await self._get_default_plan()
+        if default_plan:
+            return default_plan.hourly_message_limit
+        raise RuntimeError("No default subscription plan configured.")
 
     async def redeem_card(self, user: User, code: str) -> UserSubscription:
         now = datetime.utcnow()
@@ -106,6 +108,18 @@ class SubscriptionService:
         return new_sub
 
     # Internal helpers -------------------------------------------------
+
+    async def _get_default_plan(self) -> SubscriptionPlan | None:
+        stmt = (
+            select(SubscriptionPlan)
+            .where(
+                SubscriptionPlan.is_default.is_(True),
+                SubscriptionPlan.is_active.is_(True),
+            )
+            .order_by(SubscriptionPlan.priority.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     def _extend_same_plan(
         self,

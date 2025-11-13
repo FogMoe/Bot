@@ -58,8 +58,6 @@ class LLMSettings(BaseModel):
 
 
 class SubscriptionSettings(BaseModel):
-    free_hourly_limit: int = Field(default=5, ge=1)
-    pro_hourly_limit: int = Field(default=50, ge=1)
     subscription_duration_days: int = Field(default=30, ge=1)
 
 
