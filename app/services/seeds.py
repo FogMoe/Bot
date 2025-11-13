@@ -24,6 +24,15 @@ async def ensure_subscription_plans(session: AsyncSession, settings: BotSettings
             "is_default": True,
         },
         {
+            "code": "PLUS",
+            "name": "Plus",
+            "description": "Plus tier",
+            "hourly_message_limit": 25,
+            "monthly_price": 3.0,
+            "priority": 25,
+            "is_default": False,
+        },
+        {
             "code": "PRO",
             "name": "Pro",
             "description": "Pro tier",

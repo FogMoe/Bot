@@ -33,6 +33,7 @@ class DummyMessage:
         self.entities = []
         self.caption_entities = []
         self.answers: list[tuple[str, str | None]] = []
+        self.chat = SimpleNamespace(type="private")
 
     async def answer(self, text: str, parse_mode: str | None = None):
         self.answers.append((text, parse_mode))
@@ -87,6 +88,34 @@ async def test_user_context_creates_user_and_subscription(session):
     assert user.telegram_id == 10
     subs = (await session.execute(select(UserSubscription))).scalars().all()
     assert subs and subs[0].plan_id == plan.id
+
+
+@pytest.mark.asyncio
+async def test_user_context_blocks_group_chat(session):
+    middleware = UserContextMiddleware()
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    session.add(plan)
+    await session.flush()
+
+    message = DummyMessage(from_user=DummyFromUser(user_id=11))
+    message.chat = SimpleNamespace(type="group")
+    data = {"session": session}
+
+    async def handler(event, ctx):
+        raise AssertionError("Handler should not be called")
+
+    await middleware(handler, message, data)
+
+    assert message.answers
+    assert "private chat" in message.answers[-1][0]
 
 
 @pytest.mark.asyncio

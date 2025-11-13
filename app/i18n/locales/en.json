@@ -7,5 +7,6 @@
   "status.no_expiration": "No expiration",
   "limit.exceeded": "Hourly quota reached. Upgrade with /activate to increase your limit.",
   "chat.agent_error": "Agent failed to respond. Please try again later.",
-  "media.unsupported": "Received a {kind}, currently only text is supported. We've logged it for future processing."
+  "media.unsupported": "Received a {kind}, currently only text is supported. We've logged it for future processing.",
+  "group.not_supported": "Please talk to me in a private chat for full functionality."
 }

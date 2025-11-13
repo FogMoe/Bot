@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.core import User
 from app.services.subscriptions import SubscriptionService
 from app.utils.datetime import utc_now
+from app.bot.utils.telegram import answer_with_retry
+from app.config import get_settings
+from app.i18n import I18nService
 
 
 class UserContextMiddleware(BaseMiddleware):
@@ -22,9 +25,21 @@ class UserContextMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         session: AsyncSession = data["session"]
+        settings = get_settings()
+        i18n = I18nService(default_locale=settings.default_language)
         from_user = getattr(event, "from_user", None)
         if from_user is None:
             return await handler(event, data)
+
+        chat = getattr(event, "chat", None)
+        if chat and chat.type != "private":
+            locale = getattr(from_user, "language_code", None) or settings.default_language
+            await answer_with_retry(
+                getattr(event, "reply_to_message", event),
+                i18n.gettext("group.not_supported", locale=locale),
+                parse_mode=None,
+            )
+            return
 
         stmt = select(User).where(User.telegram_id == from_user.id)
         result = await session.execute(stmt)
