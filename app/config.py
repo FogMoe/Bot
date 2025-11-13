@@ -83,6 +83,7 @@ class BotSettings(BaseSettings):
     webhook_secret: SecretStr | None = None
     default_language: str = "en"
     timezone: str = "UTC"
+    admin_telegram_id: int | None = None
 
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

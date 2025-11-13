@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS subscription_cards (
     plan_id BIGINT UNSIGNED NOT NULL,
     status ENUM('new','redeemed','expired','disabled') NOT NULL DEFAULT 'new',
     expires_at DATETIME NULL,
+    valid_days INT UNSIGNED NULL,
     redeemed_by_user_id BIGINT UNSIGNED NULL,
     redeemed_at DATETIME NULL,
     metadata JSON NULL,

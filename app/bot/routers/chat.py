@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import secrets
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
 from app.config import get_settings
-from app.db.models.core import SubscriptionPlan, User
+from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
 from app.i18n import I18nService
 from app.services.conversations import ConversationService
 from app.services.exceptions import CardNotFound
@@ -86,6 +89,60 @@ async def handle_activate(
             plan=plan_name,
             date=subscription.expires_at.strftime("%Y-%m-%d"),
         ),
+        parse_mode=None,
+    )
+
+
+@router.message(Command("issuecard"))
+async def handle_issue_card(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if settings.admin_telegram_id is None or message.from_user is None:
+        return
+    if message.from_user.id != settings.admin_telegram_id:
+        await message.answer("Unauthorized", parse_mode=None)
+        return
+
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Usage: /issuecard <plan_code> [days] [card_code]", parse_mode=None)
+        return
+
+    plan_code = parts[1].strip()
+    duration_days: int | None = None
+    provided_code: str | None = None
+    if len(parts) >= 3:
+        if parts[2].isdigit():
+            duration_days = int(parts[2])
+            if len(parts) >= 4:
+                provided_code = parts[3].strip()
+        else:
+            provided_code = parts[2].strip()
+            if len(parts) >= 4 and parts[3].isdigit():
+                duration_days = int(parts[3])
+    plan_stmt = select(SubscriptionPlan).where(SubscriptionPlan.code == plan_code)
+    result = await session.execute(plan_stmt)
+    plan = result.scalar_one_or_none()
+    if plan is None:
+        await message.answer(f"Plan {plan_code} not found", parse_mode=None)
+        return
+
+    card_code = provided_code or _generate_card_code(plan.code)
+
+    card = SubscriptionCard(
+        code=card_code,
+        plan_id=plan.id,
+        status="new",
+        valid_days=duration_days,
+        created_by_admin_id=db_user.id if db_user else None,
+    )
+    session.add(card)
+    await session.flush()
+
+    await message.answer(
+        f"Card generated: {card_code}\nPlan: {plan.name}\nDuration: {duration_days or settings.subscriptions.subscription_duration_days} days",
         parse_mode=None,
     )
 
@@ -196,6 +253,11 @@ def _format_non_text_payload(kind: str, message: Message) -> str:
     if message.poll:
         parts.append("poll=received")
     return " ".join(parts)
+
+
+def _generate_card_code(plan_code: str) -> str:
+    token = secrets.token_hex(4).upper()
+    return f"{plan_code.upper()}-{token}"
 
 
 @router.message(F.photo)

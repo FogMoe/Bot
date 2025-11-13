@@ -85,7 +85,8 @@ class SubscriptionService:
         )
         existing_subs = list((await self.session.execute(subs_stmt)).scalars())
 
-        duration = timedelta(days=self.settings.subscriptions.subscription_duration_days)
+        duration_days = card.valid_days or self.settings.subscriptions.subscription_duration_days
+        duration = timedelta(days=duration_days)
 
         stacked = self._extend_same_plan(existing_subs, plan, duration, now)
         if stacked:

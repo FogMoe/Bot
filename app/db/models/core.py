@@ -112,6 +112,7 @@ class SubscriptionCard(Base):
         nullable=False,
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    valid_days: Mapped[int | None] = mapped_column(Integer)
     redeemed_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
