@@ -3,6 +3,7 @@
 ## 当前能力概览
 
 - **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、按小时限流。
+- **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、全局节流（短周期请求限流）与按小时限流。
 - **订阅/配额**：支持卡密激活，`user_subscriptions` 记录每次订阅。小时额度随计划自动调整，过期后回退到免费额度。
 - **Agent 架构**：
   - 主 Agent (`AgentOrchestrator`) 负责与用户对话，使用 pydantic-ai，并可调用工具。

@@ -10,7 +10,12 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 
 from app.agents.runner import AgentOrchestrator
-from app.bot.middlewares import DbSessionMiddleware, RateLimitMiddleware, UserContextMiddleware
+from app.bot.middlewares import (
+    DbSessionMiddleware,
+    RateLimitMiddleware,
+    ThrottleMiddleware,
+    UserContextMiddleware,
+)
 from app.bot.routers import setup_routers
 from app.config import get_settings
 from app.db.session import Database
@@ -39,6 +44,7 @@ async def main() -> None:
 
     database = Database(settings=settings)
     dp.update.outer_middleware(DbSessionMiddleware(database))
+    dp.message.middleware(ThrottleMiddleware(settings))
     dp.message.middleware(UserContextMiddleware())
     dp.message.middleware(RateLimitMiddleware(settings))
 

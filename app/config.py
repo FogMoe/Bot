@@ -62,6 +62,12 @@ class SubscriptionSettings(BaseModel):
     pro_hourly_limit: int = Field(default=50, ge=1)
     subscription_duration_days: int = Field(default=30, ge=1)
 
+
+class RequestLimitSettings(BaseModel):
+    max_requests: int = Field(default=5, ge=1)
+    interval_seconds: int = Field(default=10, ge=1)
+
+
 class ZaiSettings(BaseModel):
     base_url: HttpUrl | None = None
     api_key: SecretStr | None = None
@@ -90,6 +96,7 @@ class BotSettings(BaseSettings):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     zai: ZaiSettings | None = None
     subscriptions: SubscriptionSettings = Field(default_factory=SubscriptionSettings)
+    request_limit: RequestLimitSettings = Field(default_factory=RequestLimitSettings)
 
     split_markdown_newlines: bool = True
     enable_markdown_v2: bool = True
