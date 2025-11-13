@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Sequence
+from typing import Any, Awaitable, Callable, Sequence, TypeVar
 from urllib.parse import quote
 
 import httpx
 
 from app.config import ExternalToolSettings
+from app.logging import logger
+from app.utils.retry import retry_async
 
 
 class ToolServiceError(RuntimeError):
     """Raised when an external integration fails or is misconfigured."""
+
+
+T = TypeVar("T")
 
 
 class _BaseToolService:
@@ -32,6 +37,15 @@ class _BaseToolService:
             return secret.get_secret_value()
         except AttributeError:
             return str(secret)
+
+    async def _retry_http(self, name: str, operation: Callable[[], Awaitable[T]]) -> T:
+        return await retry_async(
+            operation,
+            max_attempts=3,
+            base_delay=0.5,
+            logger=logger,
+            operation_name=name,
+        )
 
 
 class SearchService(_BaseToolService):
@@ -57,13 +71,17 @@ class SearchService(_BaseToolService):
             "q": query,
             "api_key": api_key,
         }
-        try:
+        async def _request():
             response = await self._client.get(
                 "https://serpapi.com/search",
                 params=params,
                 timeout=self._settings.request_timeout_seconds,
             )
             response.raise_for_status()
+            return response
+
+        try:
+            response = await self._retry_http("serpapi_request", _request)
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500] if exc.response is not None else str(exc)
             status_code = exc.response.status_code if exc.response is not None else "unknown"
@@ -91,9 +109,9 @@ class WebContentService(_BaseToolService):
 
         timeout = self._settings.request_timeout_seconds
         headers = self._reader_headers()
-        try:
+        async def _request():
             if "#" in normalized_url:
-                response = await self._client.post(
+                resp = await self._client.post(
                     self._reader_post_url(),
                     data={"url": normalized_url},
                     headers=headers,
@@ -101,12 +119,16 @@ class WebContentService(_BaseToolService):
                 )
             else:
                 encoded_url = quote(normalized_url, safe=":/?&=#[]@!$&'()*+,;")
-                response = await self._client.get(
+                resp = await self._client.get(
                     self._reader_get_url(encoded_url),
                     headers=headers,
                     timeout=timeout,
                 )
-            response.raise_for_status()
+            resp.raise_for_status()
+            return resp
+
+        try:
+            response = await self._retry_http("web_content_fetch", _request)
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500] if exc.response is not None else str(exc)
             status_code = exc.response.status_code if exc.response is not None else "unknown"
@@ -164,14 +186,18 @@ class CodeExecutionService(_BaseToolService):
         if stdin:
             payload["stdin"] = _encode_field(stdin)
 
-        try:
-            response = await self._client.post(
+        async def _request():
+            resp = await self._client.post(
                 request_url,
                 json=payload,
                 headers=headers,
                 timeout=self._settings.request_timeout_seconds,
             )
-            response.raise_for_status()
+            resp.raise_for_status()
+            return resp
+
+        try:
+            response = await self._retry_http("judge0_execute", _request)
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500] if exc.response is not None else str(exc)
             status_code = exc.response.status_code if exc.response is not None else "unknown"

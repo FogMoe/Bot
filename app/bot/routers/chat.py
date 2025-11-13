@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
+from app.bot.utils.telegram import answer_with_retry
 from app.config import get_settings
 from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
 from app.i18n import I18nService
@@ -45,7 +46,7 @@ async def handle_start(
         locale=locale,
         name=message.from_user.full_name,
     )
-    await message.answer(greeting, parse_mode=None)
+    await answer_with_retry(message, greeting, parse_mode=None)
 
 
 @router.message(Command("status"))
@@ -83,7 +84,7 @@ async def handle_status(
         status=status_text,
         expires_at=expires_display,
     )
-    await message.answer(summary, parse_mode=None)
+    await answer_with_retry(message, summary, parse_mode=None)
 
 
 @router.message(Command("activate"))
@@ -98,7 +99,8 @@ async def handle_activate(
     locale = db_user.language_code or settings.default_language
     parts = message.text.split(maxsplit=1) if message.text else []
     if len(parts) < 2:
-        await message.answer(
+        await answer_with_retry(
+            message,
             i18n.gettext("activate.usage", locale=locale),
             parse_mode=None,
         )
@@ -109,7 +111,8 @@ async def handle_activate(
     try:
         subscription = await service.redeem_card(db_user, code)
     except CardNotFound:
-        await message.answer(
+        await answer_with_retry(
+            message,
             i18n.gettext("activate.invalid", locale=locale),
             parse_mode=None,
         )
@@ -117,7 +120,8 @@ async def handle_activate(
 
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
-    await message.answer(
+    await answer_with_retry(
+        message,
         i18n.gettext(
             "activate.success",
             locale=locale,
@@ -137,12 +141,16 @@ async def handle_issue_card(
     if settings.admin_telegram_id is None or message.from_user is None:
         return
     if message.from_user.id != settings.admin_telegram_id:
-        await message.answer("Unauthorized", parse_mode=None)
+        await answer_with_retry(message, "Unauthorized", parse_mode=None)
         return
 
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("Usage: /issuecard <plan_code> [days] [card_code]", parse_mode=None)
+        await answer_with_retry(
+            message,
+            "Usage: /issuecard <plan_code> [days] [card_code]",
+            parse_mode=None,
+        )
         return
 
     plan_code = parts[1].strip()
@@ -161,7 +169,7 @@ async def handle_issue_card(
     result = await session.execute(plan_stmt)
     plan = result.scalar_one_or_none()
     if plan is None:
-        await message.answer(f"Plan {plan_code} not found", parse_mode=None)
+        await answer_with_retry(message, f"Plan {plan_code} not found", parse_mode=None)
         return
 
     card_code = provided_code or _generate_card_code(plan.code)
@@ -176,7 +184,8 @@ async def handle_issue_card(
     session.add(card)
     await session.flush()
 
-    await message.answer(
+    await answer_with_retry(
+        message,
         f"Card generated: {card_code}\nPlan: {plan.name}\nDuration: {duration_days or settings.subscriptions.subscription_duration_days} days",
         parse_mode=None,
     )
@@ -227,7 +236,8 @@ async def handle_chat(
         user_profile=user_profile,
     )
     except Exception as exc:
-        await message.answer(
+        await answer_with_retry(
+            message,
             i18n.gettext("chat.agent_error", locale=locale),
             parse_mode=None,
         )
@@ -240,9 +250,9 @@ async def handle_chat(
     fragments = list(iter_fragments(agent_result.output))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
         try:
-            await message.answer(formatted_fragment, parse_mode="MarkdownV2")
+            await answer_with_retry(message, formatted_fragment, parse_mode="MarkdownV2")
         except Exception:
-            await message.answer(plain_fragment, parse_mode=None)
+            await answer_with_retry(message, plain_fragment, parse_mode=None)
     await conversation_service.process_agent_result(
         conversation,
         user=db_user,
@@ -318,7 +328,7 @@ async def _handle_non_text(
         user=db_user,
         messages=manual_history,
     )
-    await message.answer(reply_text, parse_mode=None)
+    await answer_with_retry(message, reply_text, parse_mode=None)
 
 
 def _format_non_text_payload(kind: str, message: Message) -> str:

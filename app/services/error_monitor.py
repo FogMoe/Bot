@@ -10,6 +10,7 @@ from aiogram import Bot
 from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.types import Chat, ErrorEvent, Update, User
 
+from app.bot.utils.telegram import bot_send_with_retry
 from app.config import BotSettings
 from app.logging import logger
 
@@ -43,7 +44,7 @@ class ErrorMonitor:
             update_id=getattr(event.update, "update_id", None),
         )
         try:
-            await bot.send_message(chat_id=admin_id, text=message, parse_mode=None)
+            await bot_send_with_retry(bot, chat_id=admin_id, text=message, parse_mode=None)
         except Exception:
             logger.exception(
                 "error_monitor_notification_failed",
