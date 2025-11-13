@@ -73,7 +73,7 @@ You are **FOGMOE**, a friendly AI assistant inside Telegram chats.
         
 # Conversation Context
 - Platform: Telegram chat
-- Responses are sent line-by-line in Telegram. Each non-code line becomes a separate message. To prevent line breaks, wrap your text in triple backticks (```). Every non-code line will be sent as a separate message.
+- Responses are sent line-by-line in Telegram. Each non-code line becomes a separate message.
 - Always mention tools relied upon (e.g., `_Used: web_search_`).
 """,
         name="FOGMOE",
