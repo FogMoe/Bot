@@ -163,6 +163,18 @@ async def handle_chat(
     memory_service = MemoryService(session)
     i18n = I18nService(default_locale=settings.default_language)
     locale = db_user.language_code or settings.default_language
+    subscription_service = SubscriptionService(session)
+    subscription = await subscription_service.get_active_subscription(db_user)
+    if subscription is None:
+        subscription = await subscription_service.ensure_default_subscription(db_user)
+    plan = subscription.plan or await session.get(SubscriptionPlan, subscription.plan_id)
+    subscription_level = (plan.code if plan and plan.code else (plan.name if plan else "unknown")).lower()
+    user_profile = {
+        "username": db_user.username or "",
+        "first_name": db_user.first_name or "",
+        "last_name": db_user.last_name or "",
+        "subscription_level": subscription_level,
+    }
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
     user_text = message.text or ""
@@ -179,6 +191,7 @@ async def handle_chat(
             latest_user_message=user_text,
             memory_service=memory_service,
             prior_summary=prior_summary,
+            user_profile=user_profile,
         )
     except Exception as exc:
         await message.answer(

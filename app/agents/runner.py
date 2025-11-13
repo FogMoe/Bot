@@ -29,6 +29,7 @@ class AgentDependencies:
     history: Sequence[ModelMessage]
     prior_summary: str | None = None
     tool_settings: ExternalToolSettings = field(default_factory=ExternalToolSettings)
+    user_profile: dict[str, str] | None = None
 
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
@@ -136,10 +137,29 @@ Your behavior results from multiple coordinated components.
     def current_time_instruction() -> str:
         """Expose the current UTC time as part of the instructions."""
         current_time = utc_now().strftime("%Y-%m-%d %H:%M UTC")
-        return f"""\
+        return f"""
 # System Information
 ## Datetime
 Current UTC time: {current_time}
+"""
+
+    @agent.instructions
+    def user_profile_instruction(ctx: RunContext[AgentDependencies]) -> str:
+        profile = ctx.deps.user_profile if ctx.deps else None
+        if not profile:
+            return ""
+        username = profile.get("username") or "unknown"
+        first_name = profile.get("first_name") or ""
+        last_name = profile.get("last_name") or ""
+        subscription = profile.get("subscription_level") or "unknown"
+        return f"""
+# User Status
+## Profile Information
+You are provided with the following user information:
+- username: {username}
+- first name: {first_name}
+- last name: {last_name}
+- subscription level: {subscription}
 """
 
     return agent
@@ -162,6 +182,7 @@ class AgentOrchestrator:
         latest_user_message: str,
         memory_service: MemoryService,
         prior_summary: str | None = None,
+        user_profile: dict[str, str] | None = None,
     ) -> AgentRunResult[str]:
         if not latest_user_message:
             raise ValueError("latest_user_message must not be empty")
@@ -176,6 +197,7 @@ class AgentOrchestrator:
                 history=history,
                 prior_summary=prior_summary,
                 tool_settings=self.settings.external_tools,
+                user_profile=user_profile,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):
