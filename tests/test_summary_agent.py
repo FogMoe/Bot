@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from pydantic import SecretStr
 
@@ -62,3 +64,34 @@ def test_summary_agent_accepts_full_azure_override():
     )
     agent = SummaryAgent.build(settings)
     assert isinstance(agent.agent.model, OpenAIChatModel)
+
+
+@pytest.mark.asyncio
+async def test_summary_agent_retries_on_failure(monkeypatch):
+    settings = _base_settings(
+        llm=LLMSettings(
+            provider="openai",
+            model="gpt-4o-mini",
+            openai=OpenAICompatibleSettings(api_key=SecretStr("sk-test")),
+        ),
+    )
+    summary_agent = SummaryAgent.build(settings)
+
+    attempts = {"count": 0}
+
+    async def fake_run(transcript):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError("boom")
+        return SimpleNamespace(output=" success ")
+
+    summary_agent.agent.run = fake_run  # type: ignore[assignment]
+
+    async def _noop(delay):
+        return None
+
+    monkeypatch.setattr("app.utils.retry.asyncio.sleep", _noop)
+
+    result = await summary_agent.summarize("hello")
+    assert attempts["count"] == 3
+    assert result == "success"

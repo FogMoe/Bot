@@ -17,9 +17,14 @@ from app.agents.model_factory import build_model_spec
 from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, ExternalToolSettings, get_settings
+from app.logging import logger
 from app.services.memory import MemoryService
 from app.services.user_insights import UserInsightService
 from app.utils.datetime import utc_now
+from app.utils.retry import retry_async
+
+AGENT_RUN_MAX_ATTEMPTS = 3
+AGENT_RUN_RETRY_BASE_DELAY = 1.0
 
 
 @dataclass
@@ -211,10 +216,19 @@ class AgentOrchestrator:
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):
-                    result = await self.agent.run(
-                        latest_user_message,
-                        deps=deps,
-                        message_history=list(history),
+                    async def _run_agent():
+                        return await self.agent.run(
+                            latest_user_message,
+                            deps=deps,
+                            message_history=list(history),
+                        )
+
+                    result = await retry_async(
+                        _run_agent,
+                        max_attempts=AGENT_RUN_MAX_ATTEMPTS,
+                        base_delay=AGENT_RUN_RETRY_BASE_DELAY,
+                        logger=logger,
+                        operation_name="agent_run",
                     )
             except asyncio.TimeoutError as exc:
                 raise TimeoutError(

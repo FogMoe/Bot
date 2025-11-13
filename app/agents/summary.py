@@ -18,6 +18,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.openai import OpenAIChatModel
 
 from app.config import BotSettings
+from app.logging import logger
+from app.utils.retry import retry_async
 from app.agents.model_factory import build_model_spec
 
 
@@ -72,7 +74,16 @@ class SummaryAgent:
         return cls(agent)
 
     async def summarize(self, transcript: str) -> str:
-        result = await self.agent.run(transcript)
+        async def _run():
+            return await self.agent.run(transcript)
+
+        result = await retry_async(
+            _run,
+            max_attempts=3,
+            base_delay=0.5,
+            logger=logger,
+            operation_name="conversation_summary",
+        )
         return result.output.strip()
 
     async def summarize_history(self, messages: Sequence[ModelMessage]) -> str:
