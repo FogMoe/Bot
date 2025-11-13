@@ -10,7 +10,12 @@ import pytest
 from sqlalchemy import select
 
 from app.bot.routers import chat as chat_router
-from app.bot.routers.chat import handle_activate, handle_chat, handle_issue_card
+from app.bot.routers.chat import (
+    handle_activate,
+    handle_chat,
+    handle_issue_card,
+    handle_status,
+)
 from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
 from app.services.exceptions import CardNotFound
 
@@ -97,6 +102,30 @@ async def test_handle_activate_invalid(session, monkeypatch):
     await handle_activate(message, session, db_user=user)
 
     assert message.answers and "Invalid" in message.answers[0][0]
+
+
+@pytest.mark.asyncio
+async def test_handle_status_shows_subscription(session):
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    user = User(telegram_id=130, username="status", language_code="en")
+    session.add_all([plan, user])
+    await session.flush()
+
+    message = DummyMessage("/status", DummyFromUser(user_id=user.telegram_id))
+    await handle_status(message, session, db_user=user)
+
+    assert message.answers
+    text, _ = message.answers[0]
+    assert "Plan: Free" in text
+    assert "Status: Active" in text
 
 
 @pytest.mark.asyncio

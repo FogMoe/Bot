@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import secrets
+from datetime import timezone
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -39,20 +40,50 @@ async def handle_start(
         return
     i18n = I18nService(default_locale=settings.default_language)
     locale = db_user.language_code or settings.default_language
-    subscription_service = SubscriptionService(session)
-    subscription = await subscription_service.get_active_subscription(db_user)
-    plan_name = "Free"
-    if subscription:
-        plan = subscription.plan or await session.get(SubscriptionPlan, subscription.plan_id)
-        if plan:
-            plan_name = plan.name
     greeting = i18n.gettext(
         "start.greeting",
         locale=locale,
         name=message.from_user.full_name,
-        plan=plan_name,
     )
     await message.answer(greeting, parse_mode=None)
+
+
+@router.message(Command("status"))
+async def handle_status(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
+    subscription_service = SubscriptionService(session)
+    subscription = await subscription_service.get_active_subscription(db_user)
+    if subscription is None:
+        subscription = await subscription_service.ensure_default_subscription(db_user)
+    plan = subscription.plan or await session.get(SubscriptionPlan, subscription.plan_id)
+    plan_name = plan.name if plan else "Unknown"
+    expires_at = subscription.expires_at
+    if expires_at:
+        expires_display = (
+            expires_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            if expires_at.tzinfo
+            else expires_at.strftime("%Y-%m-%d %H:%M")
+        )
+    else:
+        expires_display = i18n.gettext("status.no_expiration", locale=locale)
+
+    status_text = subscription.status.capitalize()
+    summary = i18n.gettext(
+        "status.summary",
+        locale=locale,
+        plan=plan_name,
+        status=status_text,
+        expires_at=expires_display,
+    )
+    await message.answer(summary, parse_mode=None)
 
 
 @router.message(Command("activate"))
