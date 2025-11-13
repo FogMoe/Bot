@@ -16,10 +16,9 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.azure import AzureProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.config import BotSettings
+from app.agents.model_factory import build_model_spec
 
 
 def _format_user_content(content: str | Sequence[str]) -> str:
@@ -88,40 +87,8 @@ __all__ = [
 
 
 def _summary_model_spec(settings: BotSettings) -> str | OpenAIChatModel:
-    """Build the summary model spec, allowing overrides via BOT_SUMMARY__* settings."""
-
     summary_settings = settings.summary
     llm_settings = settings.llm
-
-    provider = (summary_settings.provider if summary_settings and summary_settings.provider else llm_settings.provider).lower()
+    provider = (summary_settings.provider if summary_settings and summary_settings.provider else llm_settings.provider)
     model_name = summary_settings.model or llm_settings.model
-    base_url = summary_settings.base_url or llm_settings.base_url
-    api_version = summary_settings.api_version or llm_settings.api_version
-    api_key = summary_settings.api_key or llm_settings.api_key
-
-    if provider in {"azure", "azure_openai"}:
-        if not base_url or not api_version or not api_key:
-            raise ValueError(
-                "Azure OpenAI requires base_url, api_version, and api_key (configure BOT_LLM__* or BOT_SUMMARY__*)."
-            )
-        azure_provider = AzureProvider(
-            azure_endpoint=str(base_url),
-            api_version=api_version,
-            api_key=api_key.get_secret_value(),
-        )
-        return OpenAIChatModel(model_name, provider=azure_provider)
-
-    if provider in {"openai", "custom"}:
-        if summary_settings and (summary_settings.api_key or summary_settings.base_url):
-            openai_provider = OpenAIProvider(
-                api_key=summary_settings.api_key.get_secret_value() if summary_settings.api_key else None,
-                base_url=str(summary_settings.base_url) if summary_settings.base_url else None,
-            )
-            return OpenAIChatModel(model_name, provider=openai_provider)
-        return OpenAIChatModel(model_name)
-
-    provider_map = {
-        "anthropic": "anthropic",
-    }
-    prefix = provider_map.get(provider, "openai")
-    return f"{prefix}:{model_name}"
+    return build_model_spec(provider, model_name, llm_settings)

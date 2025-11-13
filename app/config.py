@@ -27,35 +27,84 @@ class RedisSettings(BaseModel):
     default_ttl_seconds: int = Field(default=600, ge=1)
 
 
+class OpenAICompatibleSettings(BaseModel):
+    api_key: SecretStr | None = None
+    base_url: HttpUrl | None = None
+
+
+class AzureProviderSettings(BaseModel):
+    api_key: SecretStr | None = None
+    base_url: HttpUrl | None = None
+    api_version: str | None = None
+
+
+class ZhipuProviderSettings(OpenAICompatibleSettings):
+    base_url: HttpUrl | None = Field(
+        default=None,
+        description="Optional override for Zhipu's OpenAI-compatible endpoint.",
+    )
+
+
 class LLMSettings(BaseModel):
-    provider: Literal["openai", "azure", "azure_openai", "anthropic", "custom"] = "openai"
+    provider: Literal["openai", "azure", "azure_openai", "zhipu", "gemini", "custom", "anthropic"] = "openai"
     model: str = "gpt-4o-mini"
     api_key: SecretStr | None = None
     base_url: HttpUrl | None = None
     api_version: str | None = None
     context_window_tokens: int = Field(default=120_000, ge=1000)
     request_timeout_seconds: int = Field(default=60, ge=5, le=600)
+    openai: OpenAICompatibleSettings = Field(default_factory=OpenAICompatibleSettings)
+    azure: AzureProviderSettings = Field(default_factory=AzureProviderSettings)
+    zhipu: ZhipuProviderSettings = Field(default_factory=ZhipuProviderSettings)
+    gemini: OpenAICompatibleSettings = Field(default_factory=OpenAICompatibleSettings)
+    custom: OpenAICompatibleSettings = Field(default_factory=OpenAICompatibleSettings)
 
     def apply_environment(self) -> None:
         """Populate SDK-required environment vars from settings."""
 
-        if self.provider in {"openai", "custom"}:
-            if self.api_key:
-                value = self.api_key.get_secret_value()
-                os.environ["OPENAI_API_KEY"] = value
-            if self.base_url:
-                os.environ["OPENAI_BASE_URL"] = str(self.base_url)
-
-        elif self.provider in {"azure", "azure_openai"}:
-            if self.api_key:
-                value = self.api_key.get_secret_value()
+        provider = self.provider.lower()
+        if provider in {"azure", "azure_openai"}:
+            api_key = self.azure.api_key or self.api_key
+            base_url = self.azure.base_url or self.base_url
+            api_version = self.azure.api_version or self.api_version
+            if api_key:
+                value = api_key.get_secret_value()
                 os.environ["AZURE_OPENAI_API_KEY"] = value
                 os.environ["OPENAI_API_KEY"] = value
-            if self.base_url:
-                os.environ["AZURE_OPENAI_ENDPOINT"] = str(self.base_url)
-            if self.api_version:
-                os.environ["AZURE_OPENAI_API_VERSION"] = self.api_version
-                os.environ["OPENAI_API_VERSION"] = self.api_version
+            if base_url:
+                endpoint = str(base_url)
+                os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+                os.environ["OPENAI_BASE_URL"] = endpoint
+            if api_version:
+                os.environ["AZURE_OPENAI_API_VERSION"] = api_version
+                os.environ["OPENAI_API_VERSION"] = api_version
+            return
+
+        if provider in {"openai", "custom", "zhipu", "gemini"}:
+            api_key, base_url = self.openai_like_credentials(provider)
+            if api_key:
+                os.environ["OPENAI_API_KEY"] = api_key.get_secret_value()
+            if base_url:
+                os.environ["OPENAI_BASE_URL"] = base_url
+
+    def openai_like_credentials(self, provider: str) -> tuple[SecretStr | None, str | None]:
+        provider = provider.lower()
+        if provider == "openai":
+            api_key = self.openai.api_key or self.api_key
+            base_url = self.openai.base_url or self.base_url
+        elif provider == "custom":
+            api_key = self.custom.api_key or self.openai.api_key or self.api_key
+            base_url = self.custom.base_url or self.openai.base_url or self.base_url
+        elif provider == "zhipu":
+            api_key = self.zhipu.api_key
+            base_url = self.zhipu.base_url or "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        elif provider == "gemini":
+            api_key = self.gemini.api_key
+            base_url = self.gemini.base_url or self.base_url
+        else:
+            api_key = self.openai.api_key or self.api_key
+            base_url = self.openai.base_url or self.base_url
+        return api_key, str(base_url) if base_url else None
 
 
 class SubscriptionSettings(BaseModel):
@@ -69,29 +118,12 @@ class RequestLimitSettings(BaseModel):
 
 
 class SummaryModelSettings(BaseModel):
-    provider: Literal["openai", "azure", "azure_openai", "anthropic", "custom"] | None = None
+    provider: Literal["openai", "azure", "azure_openai", "zhipu", "gemini", "custom"] | None = None
     model: str | None = None
-    api_key: SecretStr | None = None
-    base_url: HttpUrl | None = None
-    api_version: str | None = None
 
-    @field_validator("provider", "model", "api_version", mode="before")
+    @field_validator("provider", "model", mode="before")
     @classmethod
     def _empty_str_to_none(cls, value):
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
-
-    @field_validator("base_url", mode="before")
-    @classmethod
-    def _empty_url_to_none(cls, value):
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
-
-    @field_validator("api_key", mode="before")
-    @classmethod
-    def _empty_key_to_none(cls, value):
         if isinstance(value, str) and not value.strip():
             return None
         return value
@@ -152,4 +184,13 @@ def get_settings() -> BotSettings:
     return BotSettings()  # type: ignore[call-arg]
 
 
-__all__ = ["BotSettings", "ExternalToolSettings", "SummaryModelSettings", "get_settings"]
+__all__ = [
+    "BotSettings",
+    "ExternalToolSettings",
+    "SummaryModelSettings",
+    "OpenAICompatibleSettings",
+    "AzureProviderSettings",
+    "ZhipuProviderSettings",
+    "LLMSettings",
+    "get_settings",
+]
