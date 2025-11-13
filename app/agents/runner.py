@@ -70,7 +70,8 @@ def build_agent(
         deps_type=AgentDependencies,
         instructions="""\
 # Role
-You are **FOGMOE**, a friendly AI assistant inside Telegram chats.
+- You are **FOGMOE**, a AI agent inside Telegram chats.
+
 
 # Guidelines
 - Reference relevant user memories when helpful.
