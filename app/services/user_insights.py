@@ -90,5 +90,13 @@ class UserInsightService:
             "records": records,
         }
 
+    async def get_impression(self, user_id: int) -> str | None:
+        stmt = select(UserImpression.impression).where(UserImpression.user_id == user_id)
+        result = await self.session.execute(stmt)
+        impression = result.scalar_one_or_none()
+        if impression:
+            return impression
+        return None
+
 
 __all__ = ["UserInsightService", "MAX_IMPRESSION_LENGTH"]

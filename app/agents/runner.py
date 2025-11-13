@@ -18,6 +18,7 @@ from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, ExternalToolSettings, get_settings
 from app.services.memory import MemoryService
+from app.services.user_insights import UserInsightService
 from app.utils.datetime import utc_now
 
 
@@ -32,6 +33,7 @@ class AgentDependencies:
     prior_summary: str | None = None
     tool_settings: ExternalToolSettings = field(default_factory=ExternalToolSettings)
     user_profile: dict[str, str] | None = None
+    impression: str | None = None
 
 
 def build_agent(
@@ -133,14 +135,18 @@ Current UTC time: {current_time}
     @agent.instructions
     def user_profile_instruction(ctx: RunContext[AgentDependencies]) -> str:
         profile = ctx.deps.user_profile if ctx.deps else None
-        if not profile:
+        impression = ctx.deps.impression if ctx.deps else None
+        if not profile and not impression:
             return ""
-        username = profile.get("username") or "unknown"
-        first_name = profile.get("first_name") or ""
-        last_name = profile.get("last_name") or ""
-        subscription = profile.get("subscription_level") or "unknown"
-        return f"""
-# User Status
+
+        sections: list[str] = ["# User Status"]
+        if profile:
+            username = profile.get("username") or "unknown"
+            first_name = profile.get("first_name") or ""
+            last_name = profile.get("last_name") or ""
+            subscription = profile.get("subscription_level") or "unknown"
+            sections.append(
+                f"""\
 ## Profile Information
 You are provided with the following user information:
 - username: {username}
@@ -148,6 +154,16 @@ You are provided with the following user information:
 - last name: {last_name}
 - subscription level: {subscription}
 """
+            )
+        if impression:
+            sections.append(
+                f"""\
+## Impression
+This section contains persistent information about the user.
+- {impression}
+"""
+            )
+        return "\n".join(sections)
 
     return agent
 
@@ -177,6 +193,8 @@ class AgentOrchestrator:
 
         client_timeout = self.settings.llm.request_timeout_seconds
         async with httpx.AsyncClient(timeout=client_timeout) as client:
+            insight_service = UserInsightService(session)
+            user_impression = await insight_service.get_impression(user_id)
             deps = AgentDependencies(
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -187,6 +205,7 @@ class AgentOrchestrator:
                 prior_summary=prior_summary,
                 tool_settings=self.settings.external_tools,
                 user_profile=user_profile,
+                impression=user_impression,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):
