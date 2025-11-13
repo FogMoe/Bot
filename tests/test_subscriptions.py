@@ -5,56 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session as SyncSession, sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
 from app.db.models.core import SubscriptionPlan, User
 from app.services.subscriptions import SubscriptionService
 
 
 def _stub_settings() -> SimpleNamespace:
     return SimpleNamespace(subscriptions=SimpleNamespace(subscription_duration_days=30))
-
-
-class _AsyncSessionWrapper:
-    def __init__(self, sync_session: SyncSession) -> None:
-        self._sync = sync_session
-
-    async def execute(self, *args, **kwargs):
-        return self._sync.execute(*args, **kwargs)
-
-    async def get(self, *args, **kwargs):
-        return self._sync.get(*args, **kwargs)
-
-    def add(self, obj):
-        self._sync.add(obj)
-
-    def add_all(self, objs):
-        self._sync.add_all(objs)
-
-    async def flush(self):
-        self._sync.flush()
-
-
-@pytest_asyncio.fixture
-async def session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        future=True,
-    )
-    Base.metadata.create_all(engine)
-    SyncSessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-    sync_session = SyncSessionLocal()
-    try:
-        yield _AsyncSessionWrapper(sync_session)
-    finally:
-        sync_session.close()
-        engine.dispose()
 
 
 async def _bootstrap_user_and_plan(session):
@@ -100,3 +57,5 @@ async def test_get_hourly_limit_uses_default_plan(session):
     active = await service.get_active_subscription(user)
     assert active is not None
     assert active.plan_id == plan.id
+    assert active.plan is not None
+    assert active.plan.hourly_message_limit == plan.hourly_message_limit

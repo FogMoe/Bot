@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.core import UsageHourlyQuota, User
@@ -17,8 +17,11 @@ def _current_window_start(now: datetime) -> datetime:
 
 
 class RateLimiter:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, retention_hours: int | None = None) -> None:
         self.session = session
+        self.retention_delta = (
+            timedelta(hours=retention_hours) if retention_hours and retention_hours > 0 else None
+        )
 
     async def increment(
         self,
@@ -42,6 +45,7 @@ class RateLimiter:
         result = await self.session.execute(stmt)
         quota = result.scalar_one_or_none()
         if quota is None:
+            await self._cleanup_old_windows(user.id, window_start)
             quota = UsageHourlyQuota(
                 user_id=user.id,
                 window_start=window_start,
@@ -61,3 +65,13 @@ class RateLimiter:
         quota.updated_at = now
         await self.session.flush()
         return quota
+
+    async def _cleanup_old_windows(self, user_id: int, window_start: datetime) -> None:
+        if not self.retention_delta:
+            return
+        cutoff = window_start - self.retention_delta
+        stmt = delete(UsageHourlyQuota).where(
+            UsageHourlyQuota.user_id == user_id,
+            UsageHourlyQuota.window_start < cutoff,
+        )
+        await self.session.execute(stmt)

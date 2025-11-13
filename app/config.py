@@ -65,6 +65,7 @@ class SubscriptionSettings(BaseModel):
 class RequestLimitSettings(BaseModel):
     max_requests: int = Field(default=5, ge=1)
     interval_seconds: int = Field(default=10, ge=1)
+    window_retention_hours: int = Field(default=48, ge=1, le=168)
 
 
 class ZaiSettings(BaseModel):

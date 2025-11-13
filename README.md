@@ -7,6 +7,8 @@
 - 模块化的逻辑/应用层，包含仓储层、服务层和路由层。
 - 通过 `pydantic-ai` 实现智能体响应，支持可插拔工具和长期记忆钩子。
 - MarkdownV2 格式输出，支持换行分割；所有业务时间戳均使用 UTC，Agent 调用具备 HTTP/协程双重超时保护。
+- 按小时限流期间，会依据 `BOT_REQUEST_LIMIT__WINDOW_RETENTION_HOURS` 自动清理过期窗口，防止 `usage_hourly_quota` 膨胀。
+- 内置 `pytest` 用例覆盖订阅默认化与速率限制逻辑，可运行 `pytest` 快速回归。
 
 ## 项目结构
 
@@ -53,3 +55,10 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    ```
 
 机器人会为每次更新管理数据库会话，持久化对话记录，执行每小时配额限制，并调用 pydantic-ai 智能体。工具日志表和向量/Redis 钩子已就位，可供未来集成使用。
+
+## 测试
+
+```bash
+pip install -e .[dev]
+pytest
+```

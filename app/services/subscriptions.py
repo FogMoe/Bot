@@ -7,6 +7,7 @@ from typing import Sequence
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import BotSettings, get_settings
 from app.db.models.core import SubscriptionCard, SubscriptionPlan, User, UserSubscription
@@ -25,6 +26,7 @@ class SubscriptionService:
         now = utc_now()
         stmt = (
             select(UserSubscription)
+            .options(selectinload(UserSubscription.plan))
             .where(
                 and_(
                     UserSubscription.user_id == user.id,
@@ -44,7 +46,9 @@ class SubscriptionService:
         subscription = await self.get_active_subscription(user)
         if not subscription:
             subscription = await self.ensure_default_subscription(user)
-        plan = await self.session.get(SubscriptionPlan, subscription.plan_id)
+        plan = subscription.plan
+        if plan is None:
+            plan = await self.session.get(SubscriptionPlan, subscription.plan_id)
         if plan:
             return plan.hourly_message_limit
         raise RuntimeError("No default subscription plan configured.")
@@ -74,6 +78,7 @@ class SubscriptionService:
                 expires_at=None,
             )
             self.session.add(subscription)
+            subscription.plan = default_plan
         else:
             subscription.priority = default_plan.priority
             if subscription.status != "active":
@@ -81,6 +86,8 @@ class SubscriptionService:
                 subscription.activated_at = subscription.activated_at or now
                 subscription.starts_at = subscription.starts_at or now
             subscription.expires_at = None
+            if subscription.plan is None:
+                subscription.plan = default_plan
 
         await self.session.flush()
         return subscription

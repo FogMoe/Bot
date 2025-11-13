@@ -22,11 +22,10 @@
 位置：多处使用 datetime.utcnow()
 
 现状：新增 `app/utils/datetime.py::utc_now()`，并在 ORM 模型与 service 层统一引用带 tzinfo 的时间；数据库列改为 `DateTime(timezone=True)`，避免配额与订阅窗口出现时区偏差。
-问题 2.2：配额窗口重置逻辑缺失
+问题 2.2：配额窗口重置逻辑缺失（✅ 已修复）
 位置：rate_limit.py
 
-问题：UsageHourlyQuota 表中有 last_reset_at 字段，但代码中从未使用或更新；旧的配额记录永远不会被清理
-建议：添加定期清理任务或在创建新窗口时删除旧记录
+现状：`RateLimiter` 新增窗口保留期配置，生成新窗口时会基于 `retention_hours` 删除过期记录，并保持 `last_reset_at` 与窗口起点同步。
 问题 2.3：并发竞态条件
 位置：rate_limit.py - increment() 方法
 
@@ -98,11 +97,10 @@ prior_summary 加载但未传递给 agent (在 runner.py 中 deps.prior_summary 
 问题：使用 secrets.token_hex() 是安全的，但格式固定 {plan_code}-{4hex}-{8hex}-FOGMOE 可能暴露信息
 建议：考虑添加时间戳哈希或完全随机
 6. ⚡ 性能和并发问题
-问题 6.1：N+1 查询风险
+问题 6.1：N+1 查询风险（✅ 首批修复）
 位置：多处未使用 joinedload 或 selectinload
 
-示例：handle_activate() 中先查 subscription，再查 plan
-建议：使用 SQLAlchemy 的预加载避免额外查询
+现状：订阅查询路径（`SubscriptionService.get_active_subscription()`、`/start` handler）已切换为 `selectinload(UserSubscription.plan)`，避免每次查询 plan 时额外 round-trip；其余模块仍需按需补齐。
 问题 6.2：数据库会话泄漏风险
 位置：db_session.py (未审阅)
 
@@ -135,14 +133,10 @@ BOT_REQUEST_LIMIT__* 配置存在但未使用 (应该是 ThrottleMiddleware 使�
 
 示例："Unauthorized", "Card not found or already redeemed."
 建议：所有用户可见文本应走 i18n
-9. 🧪 测试缺失
+9. 🧪 测试缺失（✅ 持续补齐）
 问题：项目中没有任何测试文件
 
-建议：添加单元测试覆盖：
-订阅叠加和优先级逻辑
-配额窗口计算
-卡密激活流程
-Token 估算准确性
+现状：已新增 `tests/test_subscriptions.py` 与 `tests/test_rate_limit.py`，覆盖默认订阅、配额窗口清理及订阅+配额集成流程，后续仍需面向卡密、token 估算等模块扩展。
 10. 📚 文档不一致
 问题 10.1：README 与代码不符
 问题：README 说"每小时 5 条 vs 50 条消息"，但数据库 seed 是 10/50/200
@@ -158,24 +152,23 @@ Token 估算准确性
 ~~添加 agent 超时保护~~（✅ v0.1.1）
 🟡 中优先级（功能完善）
 实现 agent_runs 日志记录
-添加配额窗口清理逻辑
+~~添加配额窗口清理逻辑~~（✅ v0.1.2）
 完善管理员权限检查
 添加中文国际化
-优化数据库查询（避免 N+1）
+~~优化数据库查询（避免 N+1）~~（✅ 首批优化）
 🟢 低优先级（长期改进）
 集成向量数据库
 实现 Redis 缓存
 实现记忆压缩功能
 添加审计日志
-编写单元测试
-已完成(检查订阅系统逻辑问题/1) 6
+~~编写单元测试~~（✅ 已覆盖关键订阅/配额流程，仍待扩展）
 
 🎯 总结
 这个 Telegram AI Bot 项目架构设计良好，分层清晰，但存在以下主要问题：
 
 核心功能缺陷：订阅系统逻辑、归档摘要未使用、搜索功能占位符
 半成品功能：Redis/向量数据库/记忆压缩/审计日志表已建但未实现
-潜在 Bug：时区处理、并发竞态、配额窗口重置
-缺失保护：超时控制、完善的权限检查、国际化不全
-无测试覆盖：关键业务逻辑未验证
+潜在 Bug：并发竞态仍需验证
+缺失保护：完善的权限检查、国际化不全
+测试覆盖：已覆盖订阅/配额核心路径，但其余模块仍缺失
 建议优先修复高优先级问题，确保核心功能稳定后再完善其他特性。

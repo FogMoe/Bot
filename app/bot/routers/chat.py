@@ -39,7 +39,7 @@ async def handle_start(
     subscription = await subscription_service.get_active_subscription(db_user)
     plan_name = "Free"
     if subscription:
-        plan = await session.get(SubscriptionPlan, subscription.plan_id)
+        plan = subscription.plan or await session.get(SubscriptionPlan, subscription.plan_id)
         if plan:
             plan_name = plan.name
     greeting = i18n.gettext(

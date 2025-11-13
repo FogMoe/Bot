@@ -2,7 +2,7 @@
 
 ## 当前能力概览
 
-- **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、全局节流（短周期请求限流）与按小时限流。
+- **Telegram 交互**：基于 aiogram 3，包含数据库会话中间件、用户上下文、全局节流（短周期请求限流）与按小时限流。`RateLimiter` 会自动清理超过 `BOT_REQUEST_LIMIT__WINDOW_RETENTION_HOURS` 的旧窗口，防止配额表无限增长。
 - **订阅/配额**：支持卡密激活，`UserContextMiddleware` 在首次写入用户时会自动创建 FREE 订阅；`get_hourly_limit()` 也会兜底确保数据库中始终有默认计划。小时额度读取自计划（FREE=10、PRO=50、MAX=200），过期后回退到 FREE 记录。
 - **时间体系**：统一通过 `utc_now()` 与 `DateTime(timezone=True)` 记录时间戳，确保配额、订阅和会话窗口不会受本地时区影响。
 - **Agent 架构**：

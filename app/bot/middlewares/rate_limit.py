@@ -38,7 +38,10 @@ class RateLimitMiddleware(BaseMiddleware):
 
         subscription_service = SubscriptionService(session, self.settings)
         hourly_limit = await subscription_service.get_hourly_limit(user)
-        limiter = RateLimiter(session)
+        limiter = RateLimiter(
+            session,
+            retention_hours=self.settings.request_limit.window_retention_hours,
+        )
 
         if event.text and self._should_consume_quota(event):
             try:
