@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Iterable, Protocol, TypeVar
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
+from app.agents.collaborator import CollaboratorAgent
 from app.services.external_tools import (
     CodeExecutionService,
     SearchService,
@@ -126,6 +127,18 @@ class FetchPermanentSummariesOutput(BaseModel):
     records: list[PermanentSummary]
 
 
+class CollaborativeReasoningInput(BaseModel):
+    prompt: str = Field(..., description="Core question or problem to discuss")
+    context: str | None = Field(
+        default=None,
+        description="Optional supplemental information or constraints",
+    )
+
+
+class CollaborativeReasoningOutput(BaseModel):
+    conclusion: str = Field(..., description="Final response from the collaborator agent")
+
+
 T = TypeVar("T")
 
 
@@ -202,6 +215,22 @@ async def fetch_permanent_summaries_tool(
     )
 
 
+async def collaborative_reasoning_tool(
+    ctx: RunContext, data: CollaborativeReasoningInput
+) -> CollaborativeReasoningOutput:
+    collaborator: CollaboratorAgent | None = getattr(ctx.deps, "collaborator_agent", None)
+    if collaborator is None:
+        raise RuntimeError("Collaborator agent is not configured")
+
+    prompt_parts = []
+    if data.context:
+        prompt_parts.append("Context:\n" + data.context.strip())
+    prompt_parts.append("Task:\n" + data.prompt.strip())
+    prompt = "\n\n".join(prompt_parts)
+    result = await collaborator.run(prompt)
+    return CollaborativeReasoningOutput(conclusion=result.output)
+
+
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
     ToolTemplate(
         handler=google_search_tool,
@@ -227,6 +256,11 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
         handler=fetch_permanent_summaries_tool,
         name="fetch_permanent_summaries",
         description="Fetch user's historical conversation summaries (newest on top, max 10 results per request)",
+    ),
+    ToolTemplate(
+        handler=collaborative_reasoning_tool,
+        name="collaborative_reasoning",
+        description="Invoke an internal collaborator agent for deeper multi-step reasoning",
     ),
 )
 
@@ -256,4 +290,6 @@ __all__ = [
     "FetchPermanentSummariesInput",
     "FetchPermanentSummariesOutput",
     "PermanentSummary",
+    "CollaborativeReasoningInput",
+    "CollaborativeReasoningOutput",
 ]

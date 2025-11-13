@@ -143,6 +143,18 @@ class SummaryModelSettings(BaseModel):
         return value
 
 
+class CollaboratorModelSettings(BaseModel):
+    provider: Literal["openai", "azure", "azure_openai", "zhipu", "gemini", "custom", "anthropic"] | None = None
+    model: str | None = None
+
+    @field_validator("provider", "model", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
 class ExternalToolSettings(BaseModel):
     serpapi_api_key: SecretStr | None = None
     serpapi_engine: str = Field(default="google_light", min_length=1)
@@ -184,6 +196,7 @@ class BotSettings(BaseSettings):
     summary: SummaryModelSettings | None = None
     external_tools: ExternalToolSettings = Field(default_factory=ExternalToolSettings)
     zai: ZaiSettings | None = None
+    collaborator: CollaboratorModelSettings | None = None
     subscriptions: SubscriptionSettings = Field(default_factory=SubscriptionSettings)
     request_limit: RequestLimitSettings = Field(default_factory=RequestLimitSettings)
 

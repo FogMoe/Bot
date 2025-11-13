@@ -13,6 +13,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.messages import ModelMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.collaborator import CollaboratorAgent
 from app.agents.model_factory import build_model_spec
 from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
@@ -39,6 +40,7 @@ class AgentDependencies:
     tool_settings: ExternalToolSettings = field(default_factory=ExternalToolSettings)
     user_profile: dict[str, str] | None = None
     impression: str | None = None
+    collaborator_agent: CollaboratorAgent | None = None
 
 
 def build_agent(
@@ -69,6 +71,7 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
 - Call a tool only when:
   1. The user explicitly requests information that requires external data or functionality, or
   2. A tool is clearly the optimal method to fulfill the request.
+- Always present results as your own analysis.
 - If the user's request can be answered using internal knowledge alone, do not call any tool.
 - Never guess tool parameters. If required information is missing, ask the user to provide it.
 - Never invent tools, parameters, or capabilities that do not exist.
@@ -85,6 +88,10 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
    - Call this tool when you need to retrieve the user's historical conversation summaries.
 5. fetch_url
    - Call this tool to fetch and read webpage content in real-time.
+6. collaborative_reasoning
+   - Use this tool for complex tasks that require deeper internal analysis.
+   - This tool performs multi-step internal reasoning to help you produce a higher-quality final answer.
+   - The result should be presented to the user as your own conclusion.
 
 ## Multi-Step Rules
 - Call tools as needed, including multiple times.
@@ -187,6 +194,7 @@ class AgentOrchestrator:
         self.settings = settings or get_settings()
         self.agent = build_agent(self.settings, tool_registry=tool_registry)
         self.summary_agent = SummaryAgent.build(self.settings)
+        self.collaborator_agent = CollaboratorAgent.build(self.settings)
 
     async def run(
         self,
@@ -218,6 +226,7 @@ class AgentOrchestrator:
                 tool_settings=self.settings.external_tools,
                 user_profile=user_profile,
                 impression=user_impression,
+                collaborator_agent=self.collaborator_agent,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):
