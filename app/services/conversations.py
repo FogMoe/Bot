@@ -78,18 +78,16 @@ class ConversationService:
         summarizer: Callable[[Sequence[ModelMessage]], Awaitable[str]],
     ) -> None:
         messages = agent_result.all_messages()
-        usage = agent_result.usage()
-        previous_tokens = history_record.total_tokens if history_record else 0
-        aggregate_tokens = (previous_tokens or 0) + usage.total_tokens
+        current_tokens = self._estimate_tokens(messages)
 
-        if aggregate_tokens >= ARCHIVE_TOKEN_THRESHOLD:
+        if current_tokens >= ARCHIVE_TOKEN_THRESHOLD:
             summary_text = await summarizer(messages)
             await self._upsert_archive(
                 conversation,
                 user=user,
                 messages=messages,
                 summary_text=summary_text,
-                token_count=aggregate_tokens,
+                token_count=current_tokens,
             )
             trimmed = self._recent_messages_with_tool_context(messages, RECENT_MESSAGE_LIMIT)
             trimmed_tokens = self._estimate_tokens(trimmed)
@@ -104,7 +102,7 @@ class ConversationService:
                 conversation,
                 user=user,
                 messages=messages,
-                token_count=aggregate_tokens,
+                token_count=current_tokens,
             )
 
     async def store_manual_history(

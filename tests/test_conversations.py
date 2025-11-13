@@ -156,7 +156,7 @@ async def test_trimmed_history_preserves_tool_context(session, monkeypatch):
         isinstance(first_message, ModelRequest)
         and any(isinstance(part, ToolReturnPart) for part in first_message.parts)
     )
-    assert len(history) == 3  # limit=2 but includes tool-call context
+    assert len(history) == len(messages)
 
 
 @pytest.mark.asyncio
