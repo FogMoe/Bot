@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 from typing import Awaitable, Callable, Sequence
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.run import AgentRunResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,7 +91,7 @@ class ConversationService:
                 summary_text=summary_text,
                 token_count=aggregate_tokens,
             )
-            trimmed = list(messages[-RECENT_MESSAGE_LIMIT :])
+            trimmed = self._recent_messages_with_tool_context(messages, RECENT_MESSAGE_LIMIT)
             trimmed_tokens = self._estimate_tokens(trimmed)
             await self._persist_history(
                 conversation,
@@ -192,3 +200,20 @@ class ConversationService:
                 buffer.extend(part.content for part in message.parts if isinstance(part, TextPart))
         transcript = "\n".join(buffer)
         return estimate_tokens(transcript) if transcript else 0
+
+    def _recent_messages_with_tool_context(
+        self, messages: Sequence[ModelMessage], limit: int
+    ) -> list[ModelMessage]:
+        if len(messages) <= limit:
+            return list(messages)
+
+        start = len(messages) - limit
+        while start > 0 and _requires_preceding_tool_call(messages[start]):
+            start -= 1
+        return list(messages[start:])
+
+
+def _requires_preceding_tool_call(message: ModelMessage) -> bool:
+    if isinstance(message, ModelRequest):
+        return any(isinstance(part, ToolReturnPart) for part in message.parts)
+    return False

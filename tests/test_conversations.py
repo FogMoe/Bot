@@ -6,7 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 
 from app.db.models.core import ConversationArchive, Message, User
 from app.services import conversations as conversations_module
@@ -110,6 +117,46 @@ async def test_process_agent_result_updates_history_without_archive(session, mon
     stmt = select(Message).where(Message.conversation_id == conversation.id)
     record = (await session.execute(stmt)).scalar_one()
     assert record.message_count == len(messages)
+
+
+@pytest.mark.asyncio
+async def test_trimmed_history_preserves_tool_context(session, monkeypatch):
+    service = ConversationService(session)
+    user = await _bootstrap_user(session)
+    conversation = await service.get_or_create_active_conversation(user)
+
+    call_id = "call-1"
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="hi")]),
+        ModelResponse(parts=[ToolCallPart(tool_name="fetch_url", args={"url": "https://example.com"}, tool_call_id=call_id)]),
+        ModelRequest(parts=[ToolReturnPart(tool_name="fetch_url", content={"ok": True}, tool_call_id=call_id)]),
+        ModelResponse(parts=[TextPart(content="done")]),
+    ]
+    result = DummyResult(messages, total_tokens=200)
+
+    monkeypatch.setattr(conversations_module, "ARCHIVE_TOKEN_THRESHOLD", 50)
+    monkeypatch.setattr(conversations_module, "RECENT_MESSAGE_LIMIT", 2)
+
+    async def summarizer(history):
+        return "summary"
+
+    await service.process_agent_result(
+        conversation,
+        user=user,
+        agent_result=result,
+        history_record=None,
+        summarizer=summarizer,
+    )
+
+    stmt = select(Message).where(Message.conversation_id == conversation.id)
+    record = (await session.execute(stmt)).scalar_one()
+    history = conversations_module.ModelMessagesTypeAdapter.validate_python(record.history)
+    first_message = history[0]
+    assert not (
+        isinstance(first_message, ModelRequest)
+        and any(isinstance(part, ToolReturnPart) for part in first_message.parts)
+    )
+    assert len(history) == 3  # limit=2 but includes tool-call context
 
 
 @pytest.mark.asyncio
