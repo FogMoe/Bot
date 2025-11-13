@@ -6,8 +6,9 @@
 - **订阅/配额**：支持卡密激活，`user_subscriptions` 记录每次订阅。小时额度随计划自动调整，过期后回退到免费额度。
 - **Agent 架构**：
   - 主 Agent (`AgentOrchestrator`) 负责与用户对话，使用 pydantic-ai，并可调用工具。
-  - 工具通过 `ToolTemplate` 注册，实际业务逻辑放在 service 层（如 `SearchService`）。工具调用历史由 pydantic-ai 原生机制管理，并写入 `messages` 以供上下文参考。
-  - 短期上下文：`messages` 表按会话保存 `result.all_messages()` 的完整 JSON 轨迹（含工具调用），Agent 直接复用该快照作为下一轮的 `message_history`。
+  - 工具通过 `ToolTemplate` 注册，实际业务逻辑放在 service 层（如 `SearchService`）。工具调用历史由 pydantic-ai 原生机制管理，并写入 `messages` 以供短期上下文。
+  - 对话上下文：`messages` 表存“摘要（通过 deps 注入）+ 最近 20 条”短期记录；若总 token ≥ 100k，会把 `result.all_messages()` 全量写入 `conversation_archives`，触发 ZAI 摘要 Agent（输出限制 ~2000 tokens），并把摘要保存在同一表中。
+  - 主 Agent 每次 run 会通过 `deps` 获取最近一次摘要，从而在开头引用“上次对话总结”。
   - 长期记忆：表结构和 `MemoryService` 已就绪，但尚未实现自动提取/压缩。
 - **i18n**：使用 `app/i18n/locales/<locale>.json` 的结构化文案。`I18nService` 负责加载与缓存，默认语言 en，可按用户 `language_code` 切换。
 - **数据库**：MySQL 8，`db/schema.sql` 与 SQLAlchemy 模型同步。已清理未使用的 `tool_catalog`、`tool_invocations`、`i18n_strings`。
@@ -16,8 +17,11 @@
 
 1. 用户 `/start` → 自动建会话，返回当前订阅信息。
 2. 用户 `/activate <card>` → `SubscriptionService` 校验卡密，写入订阅并更新配额。
-3. 发送消息 → 中间件扣减小时额度。`AgentOrchestrator` 载入上一次的 `all_messages()` 快照与记忆摘要，调用 pydantic-ai，如果需要会触发工具。
-4. 模型回复/工具输出由 `result.all_messages()` 覆盖式写回 `messages`，从而保证连续对话与工具轨迹。
+3. 发送消息 → 中间件扣减额度，`AgentOrchestrator` 载入“短期 20 条 + 摘要”并调用主 Agent。如果 cumulative tokens ≥ 100k，则：
+   1. 将完整 `all_messages()` 写入 `conversation_archives`；
+   2. 通过 ZAI 摘要 Agent 得到 ≤2000 tokens 总结；
+   3. `messages` 表仅保留摘要后的最近 20 条记录。
+4. 平时 `messages` 覆盖式保存短期轨迹，历史全文则保存在 `conversation_archives`，为未来的向量检索铺垫。
 
 ## 代码结构
 

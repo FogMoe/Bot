@@ -13,6 +13,7 @@ from pydantic_ai.providers.azure import AzureProvider
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.messages import ModelMessage
 
+from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, get_settings
 from app.services.memory import MemoryService
@@ -25,6 +26,7 @@ class AgentDependencies:
     http_client: httpx.AsyncClient
     memory_service: MemoryService
     history: Sequence[ModelMessage]
+    prior_summary: str | None = None
 
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
@@ -90,6 +92,15 @@ You are **FOGMOE**, a friendly AI assistant inside Telegram chats.
 - NEVER infer, estimate, or update time on your own.
 - Current time (UTC): {current_time}
 """
+
+    @agent.instructions
+    def prior_summary_instruction(ctx: RunContext[AgentDependencies]) -> str:
+        summary = ctx.deps.prior_summary
+        if not summary:
+            return ""
+        return f"""## Previous conversation summary
+{summary}
+"""
     return agent
 
 
@@ -99,6 +110,7 @@ class AgentOrchestrator:
     ) -> None:
         self.settings = settings or get_settings()
         self.agent = build_agent(self.settings, tool_registry=tool_registry)
+        self.summary_agent = SummaryAgent.build(self.settings)
 
     async def run(
         self,
@@ -108,6 +120,7 @@ class AgentOrchestrator:
         history: Sequence[ModelMessage],
         latest_user_message: str,
         memory_service: MemoryService,
+        prior_summary: str | None = None,
     ) -> AgentRunResult[str]:
         if not latest_user_message:
             raise ValueError("latest_user_message must not be empty")
@@ -119,6 +132,7 @@ class AgentOrchestrator:
                 http_client=client,
                 memory_service=memory_service,
                 history=history,
+                prior_summary=prior_summary,
             )
             result = await self.agent.run(
                 latest_user_message,
@@ -126,3 +140,6 @@ class AgentOrchestrator:
                 message_history=list(history),
             )
             return result
+
+    async def summarize_history(self, history: Sequence[ModelMessage]) -> str:
+        return await self.summary_agent.summarize_history(history)

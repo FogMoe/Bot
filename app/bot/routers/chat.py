@@ -106,7 +106,9 @@ async def handle_chat(
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
     user_text = message.text or ""
-    history = await conversation_service.load_history(conversation)
+    history_record = await conversation_service.get_history_record(conversation)
+    history = conversation_service.deserialize_history(history_record)
+    prior_summary = await conversation_service.get_prior_summary(conversation)
 
     try:
         agent_result = await agent.run(
@@ -115,6 +117,7 @@ async def handle_chat(
             history=history,
             latest_user_message=user_text,
             memory_service=memory_service,
+            prior_summary=prior_summary,
         )
     except Exception as exc:
         await message.answer(
@@ -129,13 +132,12 @@ async def handle_chat(
             await message.answer(formatted_fragment, parse_mode="MarkdownV2")
         except Exception:
             await message.answer(plain_fragment, parse_mode=None)
-    complete_history = agent_result.all_messages()
-    usage = agent_result.usage()
-    await conversation_service.save_history(
+    await conversation_service.process_agent_result(
         conversation,
         user=db_user,
-        messages=complete_history,
-        usage=usage,
+        agent_result=agent_result,
+        history_record=history_record,
+        summarizer=agent.summarize_history,
     )
 
 
@@ -153,19 +155,18 @@ async def _handle_non_text(
     i18n = I18nService(default_locale=settings.default_language)
     locale = db_user.language_code or settings.default_language
     reply_text = i18n.gettext("media.unsupported", locale=locale, kind=kind)
-    history = await conversation_service.load_history(conversation)
-    manual_history: list[ModelMessage] = list(history)
+    history_record = await conversation_service.get_history_record(conversation)
+    manual_history: list[ModelMessage] = conversation_service.deserialize_history(history_record)
     manual_history.append(
         ModelRequest(parts=[UserPromptPart(content=payload)])
     )
     manual_history.append(
         ModelResponse(parts=[TextPart(content=reply_text)])
     )
-    await conversation_service.save_history(
+    await conversation_service.store_manual_history(
         conversation,
         user=db_user,
         messages=manual_history,
-        usage=None,
     )
     await message.answer(reply_text, parse_mode=None)
 

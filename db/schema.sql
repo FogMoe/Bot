@@ -150,6 +150,20 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     CONSTRAINT fk_agent_runs_trigger_message FOREIGN KEY (trigger_message_id) REFERENCES messages(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS conversation_archives (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    conversation_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    summary_text MEDIUMTEXT NULL,
+    history JSON NOT NULL,
+    token_count INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_conversation_archives_conversation (conversation_id),
+    KEY idx_conversation_archives_user (user_id),
+    CONSTRAINT fk_conversation_archives_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_conversation_archives_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 CREATE TABLE IF NOT EXISTS long_term_memories (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

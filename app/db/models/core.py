@@ -203,6 +203,10 @@ class Conversation(Base):
         back_populates="conversation",
         uselist=False,
     )
+    archive: Mapped["ConversationArchive" | None] = relationship(
+        back_populates="conversation",
+        uselist=False,
+    )
 
 
 class Message(Base):
@@ -223,6 +227,22 @@ class Message(Base):
 
     conversation: Mapped[Conversation] = relationship(back_populates="history")
     user: Mapped[User | None] = relationship()
+
+
+class ConversationArchive(Base):
+    __tablename__ = "conversation_archives"
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), unique=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    summary_text: Mapped[str | None] = mapped_column(Text)
+    history: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    token_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="archive")
+    user: Mapped[User] = relationship()
 
 
 class AgentRun(Base):
@@ -391,6 +411,7 @@ __all__ = [
     "UsageHourlyQuota",
     "Conversation",
     "Message",
+    "ConversationArchive",
     "AgentRun",
     "LongTermMemory",
     "MemoryChunk",

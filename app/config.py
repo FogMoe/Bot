@@ -62,6 +62,12 @@ class SubscriptionSettings(BaseModel):
     pro_hourly_limit: int = Field(default=50, ge=1)
     subscription_duration_days: int = Field(default=30, ge=1)
 
+class ZaiSettings(BaseModel):
+    base_url: HttpUrl | None = None
+    api_key: SecretStr | None = None
+    default_model: str | None = None
+    summary_model: str | None = None
+
 
 class BotSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -81,6 +87,7 @@ class BotSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    zai: ZaiSettings | None = None
     subscriptions: SubscriptionSettings = Field(default_factory=SubscriptionSettings)
 
     split_markdown_newlines: bool = True
