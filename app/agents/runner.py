@@ -93,14 +93,6 @@ You are **FOGMOE**, a friendly AI assistant inside Telegram chats.
 - Current time (UTC): {current_time}
 """
 
-    @agent.instructions
-    def prior_summary_instruction(ctx: RunContext[AgentDependencies]) -> str:
-        summary = ctx.deps.prior_summary
-        if not summary:
-            return ""
-        return f"""## Previous conversation summary
-{summary}
-"""
     return agent
 
 
