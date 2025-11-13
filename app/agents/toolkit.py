@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Awaitable, Iterable, Protocol, TypeVar
+from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
+from pydantic_ai.messages import ModelMessage
 from app.agents.collaborator import CollaboratorAgent
 from app.services.external_tools import (
     CodeExecutionService,
@@ -133,10 +134,16 @@ class CollaborativeReasoningInput(BaseModel):
         default=None,
         description="Optional supplemental information or constraints",
     )
+    rounds: int = Field(
+        default=2,
+        ge=1,
+        le=3,
+        description="Number of internal reasoning rounds",
+    )
 
 
 class CollaborativeReasoningOutput(BaseModel):
-    conclusion: str = Field(..., description="Final response from the collaborator agent")
+    result: str = Field(..., description="Final response from the collaborator agent")
 
 
 T = TypeVar("T")
@@ -226,9 +233,38 @@ async def collaborative_reasoning_tool(
     if data.context:
         prompt_parts.append("Context:\n" + data.context.strip())
     prompt_parts.append("Task:\n" + data.prompt.strip())
-    prompt = "\n\n".join(prompt_parts)
-    result = await collaborator.run(prompt)
-    return CollaborativeReasoningOutput(conclusion=result.output)
+    task_description = "\n\n".join(prompt_parts)
+
+    conversation_history: Sequence[ModelMessage] = []
+    reasoning_rounds = data.rounds
+
+    async def _run_with_history(user_prompt: str, history: Sequence[ModelMessage]) -> tuple[str, list[ModelMessage]]:
+        run_result = await collaborator.run(user_prompt, message_history=history)
+        return run_result.output, list(run_result.all_messages())
+
+    for round_index in range(1, reasoning_rounds + 1):
+        reasoning_prompt = (
+            "You are collaborating with me on the following problem.\n"
+            f"{task_description}\n\n"
+            f"Round {round_index}/{reasoning_rounds}: Expand the reasoning, explore alternative angles, and highlight risks. "
+            "Focus on new information compared to previous rounds."
+        )
+        _, conversation_history = await _run_with_history(reasoning_prompt, conversation_history)
+
+        reflection_prompt = (
+            "Reflect on your latest answer. What assumptions need verification, and what should you investigate next? "
+            "Answer as internal notes to yourself."
+        )
+        _, conversation_history = await _run_with_history(reflection_prompt, conversation_history)
+
+    summary_prompt = (
+        "You have completed multiple internal rounds of analysis for the task below.\n"
+        f"{task_description}\n\n"
+        "Summarize the full reasoning, resolve open questions, and present the best final answer."
+    )
+    final_run = await collaborator.run(summary_prompt, message_history=conversation_history)
+
+    return CollaborativeReasoningOutput(result=final_run.output)
 
 
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
