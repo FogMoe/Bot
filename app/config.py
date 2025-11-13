@@ -101,6 +101,7 @@ class ExternalToolSettings(BaseModel):
     serpapi_api_key: SecretStr | None = None
     serpapi_engine: str = Field(default="google_light", min_length=1)
     jina_reader_base_url: AnyHttpUrl = Field(default="https://r.jina.ai/")
+    jina_reader_api_token: SecretStr | None = None
     judge0_api_url: AnyHttpUrl | None = None
     judge0_api_key: SecretStr | None = None
     judge0_language_id: int = Field(default=71, ge=1)

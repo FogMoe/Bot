@@ -90,17 +90,20 @@ class WebContentService(_BaseToolService):
             normalized_url = f"https://{normalized_url}"
 
         timeout = self._settings.request_timeout_seconds
+        headers = self._reader_headers()
         try:
             if "#" in normalized_url:
                 response = await self._client.post(
                     self._reader_post_url(),
                     data={"url": normalized_url},
+                    headers=headers,
                     timeout=timeout,
                 )
             else:
                 encoded_url = quote(normalized_url, safe=":/?&=#[]@!$&'()*+,;")
                 response = await self._client.get(
                     self._reader_get_url(encoded_url),
+                    headers=headers,
                     timeout=timeout,
                 )
             response.raise_for_status()
@@ -128,6 +131,12 @@ class WebContentService(_BaseToolService):
 
     def _reader_get_url(self, encoded_url: str) -> str:
         return f"{self._reader_base()}/{encoded_url.lstrip('/')}"
+
+    def _reader_headers(self) -> dict[str, str]:
+        api_token = self._read_secret(self._settings.jina_reader_api_token)
+        if not api_token:
+            return {}
+        return {"Authorization": f"Bearer {api_token}"}
 
 
 class CodeExecutionService(_BaseToolService):
