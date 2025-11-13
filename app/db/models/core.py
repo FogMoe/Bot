@@ -203,7 +203,7 @@ class Conversation(Base):
         back_populates="conversation",
         uselist=False,
     )
-    archive: Mapped["ConversationArchive" | None] = relationship(
+    archive: Mapped["ConversationArchive | None"] = relationship(
         back_populates="conversation",
         uselist=False,
     )
