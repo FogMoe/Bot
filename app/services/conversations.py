@@ -11,6 +11,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
@@ -194,8 +195,18 @@ class ConversationService:
                 for part in message.parts:
                     if isinstance(part, UserPromptPart):
                         buffer.append(str(part.content))
+                    elif isinstance(part, ToolReturnPart):
+                        buffer.append(
+                            f"TOOL_RETURN[{part.tool_name}]: {_stringify_tool_content(part.content)}"
+                        )
             elif isinstance(message, ModelResponse):
-                buffer.extend(part.content for part in message.parts if isinstance(part, TextPart))
+                for part in message.parts:
+                    if isinstance(part, TextPart):
+                        buffer.append(part.content)
+                    elif isinstance(part, ToolCallPart):
+                        buffer.append(
+                            f"TOOL_CALL[{part.tool_name}]: {_stringify_tool_content(part.args)}"
+                        )
         transcript = "\n".join(buffer)
         return estimate_tokens(transcript) if transcript else 0
 
@@ -215,3 +226,14 @@ def _requires_preceding_tool_call(message: ModelMessage) -> bool:
     if isinstance(message, ModelRequest):
         return any(isinstance(part, ToolReturnPart) for part in message.parts)
     return False
+
+
+def _stringify_tool_content(payload: object) -> str:
+    if payload is None:
+        return ""
+    if isinstance(payload, str):
+        return payload
+    try:
+        return json.dumps(payload, ensure_ascii=False)
+    except TypeError:
+        return str(payload)

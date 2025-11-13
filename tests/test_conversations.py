@@ -171,3 +171,29 @@ async def test_store_manual_history(session):
     stmt = select(Message).where(Message.conversation_id == conversation.id)
     record = (await session.execute(stmt)).scalar_one()
     assert record.message_count == len(messages)
+
+
+@pytest.mark.asyncio
+async def test_estimate_tokens_includes_tool_payload(session, monkeypatch):
+    service = ConversationService(session)
+    captured: dict[str, str] = {}
+
+    def fake_estimate(text: str) -> int:
+        captured["text"] = text
+        return len(text)
+
+    monkeypatch.setattr(conversations_module, "estimate_tokens", fake_estimate)
+
+    call_id = "call-ctx"
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="hi")]),
+        ModelResponse(parts=[ToolCallPart(tool_name="fetch_url", args={"url": "https://example.com"}, tool_call_id=call_id)]),
+        ModelRequest(parts=[ToolReturnPart(tool_name="fetch_url", content={"ok": True}, tool_call_id=call_id)]),
+        ModelResponse(parts=[TextPart(content="done")]),
+    ]
+
+    count = service._estimate_tokens(messages)
+    assert "TOOL_CALL[fetch_url]" in captured["text"]
+    assert "https://example.com" in captured["text"]
+    assert "TOOL_RETURN[fetch_url]" in captured["text"]
+    assert count == len(captured["text"])
