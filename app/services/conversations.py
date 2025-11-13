@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Sequence
 
@@ -54,8 +55,9 @@ class ConversationService:
         messages: Sequence[ModelMessage],
         usage: RunUsage | None = None,
     ) -> Message:
-        payload = ModelMessagesTypeAdapter.dump_python(list(messages))
-        message_count = len(payload)
+        payload_json = ModelMessagesTypeAdapter.dump_json(list(messages))
+        payload = json.loads(payload_json)
+        message_count = len(messages)
 
         stmt = select(Message).where(Message.conversation_id == conversation.id)
         result = await self.session.execute(stmt)

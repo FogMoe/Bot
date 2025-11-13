@@ -199,7 +199,7 @@ class Conversation(Base):
     last_interaction_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     user: Mapped[User] = relationship(back_populates="conversations")
-    history: Mapped["Message" | None] = relationship(
+    history: Mapped["Message"] = relationship(
         back_populates="conversation",
         uselist=False,
     )
