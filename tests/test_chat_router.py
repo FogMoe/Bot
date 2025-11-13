@@ -16,9 +16,11 @@ from app.services.exceptions import CardNotFound
 
 
 class DummyMessage:
-    def __init__(self, text: str, from_user):
+    def __init__(self, text: str, from_user, *, caption: str | None = None, reply_to_message=None):
         self.text = text
+        self.caption = caption
         self.from_user = from_user
+        self.reply_to_message = reply_to_message
         self.answers: list[tuple[str, str | None]] = []
 
     async def answer(self, text: str, parse_mode: str | None = None):
@@ -134,6 +136,56 @@ async def test_handle_chat_happy_path(session, monkeypatch):
 
     assert message.answers
     assert any("Hello" in ans for ans, _ in message.answers)
+
+
+@pytest.mark.asyncio
+async def test_handle_chat_includes_reply_context(session, monkeypatch):
+    user = User(telegram_id=115, username="chat", language_code="en")
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    session.add_all([user, plan])
+    await session.flush()
+
+    fake_agent_result = SimpleNamespace(
+        output="ack",
+        all_messages=lambda: [],
+        usage=lambda: SimpleNamespace(total_tokens=0),
+    )
+
+    class CapturingAgent:
+        def __init__(self):
+            self.last_user_message = None
+
+        async def run(self, **kwargs):
+            self.last_user_message = kwargs["latest_user_message"]
+            return fake_agent_result
+
+        async def summarize_history(self, history):
+            return "summary"
+
+    reply_message = SimpleNamespace(
+        text="previous answer",
+        caption=None,
+        from_user=SimpleNamespace(is_bot=True),
+    )
+    message = DummyMessage(
+        "follow up question",
+        DummyFromUser(user_id=user.telegram_id),
+        reply_to_message=reply_message,
+    )
+    agent = CapturingAgent()
+    await handle_chat(message, session, agent, db_user=user)
+
+    assert agent.last_user_message is not None
+    assert agent.last_user_message.startswith('> Quote from Assistant: "previous answer"')
+    assert agent.last_user_message.splitlines()[-1] == "follow up question"
 
 
 @pytest.mark.asyncio

@@ -26,6 +26,7 @@ from app.services.subscriptions import SubscriptionService
 
 router = Router()
 settings = get_settings()
+REPLY_CONTEXT_CHAR_LIMIT = 600
 
 
 @router.message(CommandStart())
@@ -177,7 +178,7 @@ async def handle_chat(
     }
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
-    user_text = message.text or ""
+    user_text = _compose_user_input_text(message)
     history_record = await conversation_service.get_history_record(conversation)
     history = conversation_service.deserialize_history(history_record)
     prior_summary = await conversation_service.get_prior_summary(conversation)
@@ -191,8 +192,8 @@ async def handle_chat(
             latest_user_message=user_text,
             memory_service=memory_service,
             prior_summary=prior_summary,
-            user_profile=user_profile,
-        )
+        user_profile=user_profile,
+    )
     except Exception as exc:
         await message.answer(
             i18n.gettext("chat.agent_error", locale=locale),
@@ -217,6 +218,36 @@ async def handle_chat(
         history_record=history_record,
         summarizer=agent.summarize_history,
     )
+
+
+def _compose_user_input_text(message: Message) -> str:
+    base_text = message.text or message.caption or ""
+    reply_context = _format_reply_context(getattr(message, "reply_to_message", None))
+    if reply_context:
+        return f"{reply_context}\n{base_text}" if base_text else reply_context
+    return base_text
+
+
+def _format_reply_context(reply_message: Message | None) -> str:
+    if reply_message is None:
+        return ""
+    reply_text = reply_message.text or reply_message.caption or ""
+    reply_text = _sanitize_reply_text(reply_text)
+    if not reply_text:
+        return ""
+    reply_author = reply_message.from_user
+    role = "Assistant" if getattr(reply_author, "is_bot", False) else "User"
+    safe_text = reply_text.replace('"', '\\"')
+    return f'> Quote from {role}: "{safe_text}"'
+
+
+def _sanitize_reply_text(text: str | None) -> str:
+    if not text:
+        return ""
+    compact = " ".join(text.split())
+    if len(compact) <= REPLY_CONTEXT_CHAR_LIMIT:
+        return compact
+    return f"{compact[: REPLY_CONTEXT_CHAR_LIMIT].rstrip()}..."
 
 
 async def _send_typing_action(message: Message) -> None:
