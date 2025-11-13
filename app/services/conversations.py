@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Sequence
 
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.usage import RunUsage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,45 +38,46 @@ class ConversationService:
         await self.session.flush()
         return conversation
 
-    async def add_message(
+    async def load_history(self, conversation: Conversation) -> list[ModelMessage]:
+        stmt = select(Message).where(Message.conversation_id == conversation.id)
+        result = await self.session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record or not record.history:
+            return []
+        return ModelMessagesTypeAdapter.validate_python(record.history)
+
+    async def save_history(
         self,
         conversation: Conversation,
         *,
-        user: User | None,
-        role: str,
-        content_markdown: str | None,
-        content_plain: str | None,
-        token_count: int | None = None,
-        reply_to: Message | None = None,
-        delivered_fragment_index: int | None = None,
-        visible: bool = True,
+        user: User,
+        messages: Sequence[ModelMessage],
+        usage: RunUsage | None = None,
     ) -> Message:
-        message = Message(
-            conversation_id=conversation.id,
-            user_id=user.id if user else None,
-            role=role,
-            content_markdown=content_markdown,
-            content_plain=content_plain,
-            reply_to_message_id=reply_to.id if reply_to else None,
-            token_count=token_count,
-            delivered_fragment_index=delivered_fragment_index,
-            is_visible_to_user=visible,
-        )
-        self.session.add(message)
-        conversation.last_interaction_at = datetime.utcnow()
-        if token_count:
-            conversation.context_tokens += token_count
-        await self.session.flush()
-        return message
+        payload = ModelMessagesTypeAdapter.dump_python(list(messages))
+        message_count = len(payload)
 
-    async def get_recent_messages(
-        self, conversation: Conversation, limit: int = 20
-    ) -> list[Message]:
-        stmt = (
-            select(Message)
-            .where(Message.conversation_id == conversation.id)
-            .order_by(Message.sent_at.desc())
-            .limit(limit)
-        )
+        stmt = select(Message).where(Message.conversation_id == conversation.id)
         result = await self.session.execute(stmt)
-        return list(reversed(result.scalars().all()))
+        record = result.scalar_one_or_none()
+        if record is None:
+            record = Message(
+                conversation_id=conversation.id,
+                user_id=user.id,
+                history=payload,
+                total_tokens=usage.total_tokens if usage else None,
+                message_count=message_count,
+            )
+            self.session.add(record)
+        else:
+            record.history = payload
+            record.user_id = user.id
+            record.total_tokens = usage.total_tokens if usage else record.total_tokens
+            record.message_count = message_count
+
+        conversation.last_interaction_at = datetime.utcnow()
+        if usage:
+            conversation.context_tokens = usage.total_tokens
+
+        await self.session.flush()
+        return record

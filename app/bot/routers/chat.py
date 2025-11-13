@@ -5,19 +5,18 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
 from app.config import get_settings
 from app.db.models.core import SubscriptionPlan, User
-from app.domain.models import MessageModel
 from app.i18n import I18nService
 from app.services.conversations import ConversationService
 from app.services.exceptions import CardNotFound
 from app.services.memory import MemoryService
 from app.services.subscriptions import SubscriptionService
-from app.utils.tokens import estimate_tokens
 
 router = Router()
 settings = get_settings()
@@ -107,32 +106,14 @@ async def handle_chat(
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
     user_text = message.text or ""
-    user_tokens = estimate_tokens(user_text)
-    db_message = await conversation_service.add_message(
-        conversation,
-        user=db_user,
-        role="user",
-        content_markdown=user_text,
-        content_plain=user_text,
-        token_count=user_tokens,
-    )
-
-    history = await conversation_service.get_recent_messages(conversation, limit=20)
-    history_models = [
-        MessageModel(
-            id=item.id,
-            role=item.role,
-            content=item.content_plain or item.content_markdown or "",
-            sent_at=item.sent_at,
-        )
-        for item in history
-    ]
+    history = await conversation_service.load_history(conversation)
 
     try:
         agent_result = await agent.run(
             user_id=db_user.id,
             conversation_id=conversation.id,
-            messages=history_models,
+            history=history,
+            latest_user_message=user_text,
             memory_service=memory_service,
         )
     except Exception as exc:
@@ -142,22 +123,22 @@ async def handle_chat(
         )
         raise exc
 
-    fragments = list(iter_fragments(agent_result))
+    fragments = list(iter_fragments(agent_result.output))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
         try:
             await message.answer(formatted_fragment, parse_mode="MarkdownV2")
         except Exception:
             await message.answer(plain_fragment, parse_mode=None)
-        await conversation_service.add_message(
-            conversation,
-            user=None,
-            role="assistant",
-            content_markdown=plain_fragment,
-            content_plain=plain_fragment,
-            token_count=estimate_tokens(plain_fragment),
-            reply_to=db_message if idx == 0 else None,
-            delivered_fragment_index=idx,
-        )
+    complete_history = agent_result.all_messages()
+    usage = agent_result.usage()
+    await conversation_service.save_history(
+        conversation,
+        user=db_user,
+        messages=complete_history,
+        usage=usage,
+    )
+
+
 async def _handle_non_text(
     message: Message,
     session: AsyncSession,
@@ -169,20 +150,24 @@ async def _handle_non_text(
     conversation_service = ConversationService(session)
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
     payload = _format_non_text_payload(kind, message)
-    await conversation_service.add_message(
-        conversation,
-        user=db_user,
-        role="user",
-        content_markdown=payload,
-        content_plain=payload,
-        token_count=estimate_tokens(payload),
-    )
     i18n = I18nService(default_locale=settings.default_language)
     locale = db_user.language_code or settings.default_language
-    await message.answer(
-        i18n.gettext("media.unsupported", locale=locale, kind=kind),
-        parse_mode=None,
+    reply_text = i18n.gettext("media.unsupported", locale=locale, kind=kind)
+    history = await conversation_service.load_history(conversation)
+    manual_history: list[ModelMessage] = list(history)
+    manual_history.append(
+        ModelRequest(parts=[UserPromptPart(content=payload)])
     )
+    manual_history.append(
+        ModelResponse(parts=[TextPart(content=reply_text)])
+    )
+    await conversation_service.save_history(
+        conversation,
+        user=db_user,
+        messages=manual_history,
+        usage=None,
+    )
+    await message.answer(reply_text, parse_mode=None)
 
 
 def _format_non_text_payload(kind: str, message: Message) -> str:

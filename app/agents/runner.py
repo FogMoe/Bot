@@ -9,11 +9,11 @@ import httpx
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.azure import AzureProvider
+from pydantic_ai.run import AgentRunResult
+from pydantic_ai.messages import ModelMessage
 
-from app.agents.history import build_message_history
 from app.agents.toolkit import ToolRegistry
 from app.config import BotSettings, get_settings
-from app.domain.models import MessageModel
 from app.services.memory import MemoryService
 
 
@@ -23,7 +23,7 @@ class AgentDependencies:
     conversation_id: int
     http_client: httpx.AsyncClient
     memory_service: MemoryService
-    recent_messages: Sequence[MessageModel]
+    history: Sequence[ModelMessage]
 
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
@@ -106,14 +106,12 @@ class AgentOrchestrator:
         *,
         user_id: int,
         conversation_id: int,
-        messages: Sequence[MessageModel],
+        history: Sequence[ModelMessage],
+        latest_user_message: str,
         memory_service: MemoryService,
-    ) -> str:
-        if not messages:
-            raise ValueError("messages list must contain at least one user turn")
-
-        prior_messages = build_message_history(messages[:-1])
-        latest_message = messages[-1]
+    ) -> AgentRunResult[str]:
+        if not latest_user_message:
+            raise ValueError("latest_user_message must not be empty")
 
         async with httpx.AsyncClient(timeout=30) as client:
             deps = AgentDependencies(
@@ -121,11 +119,11 @@ class AgentOrchestrator:
                 conversation_id=conversation_id,
                 http_client=client,
                 memory_service=memory_service,
-                recent_messages=messages,
+                history=history,
             )
             result = await self.agent.run(
-                latest_message.content,
+                latest_user_message,
                 deps=deps,
-                message_history=prior_messages,
+                message_history=list(history),
             )
-            return result.output
+            return result

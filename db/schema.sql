@@ -121,19 +121,15 @@ CREATE TABLE IF NOT EXISTS messages (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     conversation_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NULL,
-    role ENUM('user','assistant','system','tool') NOT NULL,
-    content_markdown MEDIUMTEXT NULL,
-    content_plain MEDIUMTEXT NULL,
-    token_count INT UNSIGNED NULL,
-    reply_to_message_id BIGINT UNSIGNED NULL,
-    delivered_fragment_index SMALLINT UNSIGNED NULL,
-    is_visible_to_user TINYINT(1) NOT NULL DEFAULT 1,
-    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_messages_conversation_sent (conversation_id, sent_at),
+    history JSON NOT NULL,
+    total_tokens INT UNSIGNED NULL,
+    message_count INT UNSIGNED NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_messages_conversation (conversation_id),
     KEY idx_messages_user (user_id),
     CONSTRAINT fk_messages_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    CONSTRAINT fk_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT fk_messages_reply FOREIGN KEY (reply_to_message_id) REFERENCES messages(id) ON DELETE SET NULL
+    CONSTRAINT fk_messages_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_runs (

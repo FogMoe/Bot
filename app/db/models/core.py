@@ -199,33 +199,30 @@ class Conversation(Base):
     last_interaction_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     user: Mapped[User] = relationship(back_populates="conversations")
-    messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    history: Mapped["Message" | None] = relationship(
+        back_populates="conversation",
+        uselist=False,
+    )
 
 
 class Message(Base):
     __tablename__ = "messages"
 
     conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("conversations.id", ondelete="CASCADE")
+        ForeignKey("conversations.id", ondelete="CASCADE"), unique=True
     )
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    role: Mapped[str] = mapped_column(
-        Enum("user", "assistant", "system", "tool", name="message_role"),
-        nullable=False,
+    history: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    message_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
     )
-    content_markdown: Mapped[str | None] = mapped_column(Text)
-    content_plain: Mapped[str | None] = mapped_column(Text)
-    token_count: Mapped[int | None] = mapped_column(Integer)
-    reply_to_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("messages.id", ondelete="SET NULL")
-    )
-    delivered_fragment_index: Mapped[int | None] = mapped_column(SmallInteger)
-    is_visible_to_user: Mapped[bool] = mapped_column(default=True)
-    sent_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
-    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    conversation: Mapped[Conversation] = relationship(back_populates="history")
     user: Mapped[User | None] = relationship()
-    reply_to: Mapped["Message | None"] = relationship(remote_side="Message.id")
 
 
 class AgentRun(Base):

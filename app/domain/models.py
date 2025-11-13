@@ -30,16 +30,8 @@ class SubscriptionPlanModel(BaseModel):
     hourly_message_limit: int
 
 
-class MessageModel(BaseModel):
-    id: int
-    role: Literal["user", "assistant", "system", "tool"]
-    content: str
-    sent_at: datetime
-
-
 __all__ = [
     "UserModel",
     "UsageQuotaModel",
     "SubscriptionPlanModel",
-    "MessageModel",
 ]
