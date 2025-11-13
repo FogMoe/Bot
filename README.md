@@ -47,6 +47,7 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    BOT_LLM__API_KEY=sk-...
    ```
 
+   如需单独配置总结模型，可设置 `BOT_SUMMARY__*`（provider/model/base_url/api_key），否则默认沿用主 LLM。
    如需启用工具调用的外部 API，请设置 `BOT_EXTERNAL_TOOLS__*` 相关变量（SerpApi、Jina Reader、Judge0）。默认值会保留占位，便于本地演示。
 
 4. 如需通过代理访问 Telegram，可在 `.env` 中设置 `BOT_TELEGRAM_PROXY`（支持 http/https/socks5 URL）；留空表示直连。

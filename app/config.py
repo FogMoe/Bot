@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Literal
 import os
 
-from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, SecretStr
+from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -68,6 +68,35 @@ class RequestLimitSettings(BaseModel):
     window_retention_hours: int = Field(default=48, ge=1, le=168)
 
 
+class SummaryModelSettings(BaseModel):
+    provider: Literal["openai", "azure", "azure_openai", "anthropic", "custom"] | None = None
+    model: str | None = None
+    api_key: SecretStr | None = None
+    base_url: HttpUrl | None = None
+    api_version: str | None = None
+
+    @field_validator("provider", "model", "api_version", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _empty_url_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _empty_key_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
 class ExternalToolSettings(BaseModel):
     serpapi_api_key: SecretStr | None = None
     serpapi_engine: str = Field(default="google_light", min_length=1)
@@ -105,6 +134,7 @@ class BotSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    summary: SummaryModelSettings | None = None
     external_tools: ExternalToolSettings = Field(default_factory=ExternalToolSettings)
     zai: ZaiSettings | None = None
     subscriptions: SubscriptionSettings = Field(default_factory=SubscriptionSettings)
@@ -121,4 +151,4 @@ def get_settings() -> BotSettings:
     return BotSettings()  # type: ignore[call-arg]
 
 
-__all__ = ["BotSettings", "ExternalToolSettings", "get_settings"]
+__all__ = ["BotSettings", "ExternalToolSettings", "SummaryModelSettings", "get_settings"]
