@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import secrets
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from aiogram.enums import ChatAction
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -167,6 +170,7 @@ async def handle_chat(
     history = conversation_service.deserialize_history(history_record)
     prior_summary = await conversation_service.get_prior_summary(conversation)
 
+    typing_task = asyncio.create_task(_send_typing_action(message))
     try:
         agent_result = await agent.run(
             user_id=db_user.id,
@@ -182,6 +186,10 @@ async def handle_chat(
             parse_mode=None,
         )
         raise exc
+    finally:
+        typing_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await typing_task
 
     fragments = list(iter_fragments(agent_result.output))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
@@ -196,6 +204,15 @@ async def handle_chat(
         history_record=history_record,
         summarizer=agent.summarize_history,
     )
+
+
+async def _send_typing_action(message: Message) -> None:
+    try:
+        while True:
+            await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+            await asyncio.sleep(4)
+    except asyncio.CancelledError:
+        pass
 
 
 async def _handle_non_text(
