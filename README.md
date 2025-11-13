@@ -60,5 +60,7 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
 
 ```bash
 pip install -e .[dev]
-pytest
+pytest          # 运行全部单测
+# 如需覆盖率：pytest --cov=app （需安装 pytest-cov）
+# 集成测试包含在默认 test suite（tests/test_integration.py）中，确保订阅/配额/对话/记忆链路完整。
 ```

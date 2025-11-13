@@ -40,7 +40,7 @@ class SubscriptionService:
             .order_by(UserSubscription.priority.desc(), UserSubscription.expires_at.desc())
         )
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_hourly_limit(self, user: User) -> int:
         subscription = await self.get_active_subscription(user)
