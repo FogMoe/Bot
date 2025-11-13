@@ -45,9 +45,14 @@ class DummyDispatcher:
         self.started = False
         self.update = SimpleNamespace(outer_middleware=self.outer_middlewares.append)
         self.message = SimpleNamespace(middleware=self.message_middlewares.append)
+        self.registered_error_handlers = []
+        self.errors = SimpleNamespace(register=self.register_error)
 
     def include_router(self, router):
         self.included.append(router)
+
+    def register_error(self, handler):
+        self.registered_error_handlers.append(handler)
 
     async def start_polling(self, bot, *, agent):
         self.started = True
@@ -119,6 +124,8 @@ async def test_main_bootstrap(monkeypatch):
     monkeypatch.setattr(main_module, "ThrottleMiddleware", _capture("throttle"))
     monkeypatch.setattr(main_module, "UserContextMiddleware", lambda: "userctx")
     monkeypatch.setattr(main_module, "RateLimitMiddleware", _capture("rate"))
+    dummy_monitor = object()
+    monkeypatch.setattr(main_module, "ErrorMonitor", lambda settings: dummy_monitor)
     monkeypatch.setattr(main_module, "setup_routers", lambda: "router")
 
     await main_module.main()
@@ -128,6 +135,7 @@ async def test_main_bootstrap(monkeypatch):
     assert "called" in seed_calls
     assert dummy_dispatcher.started is True
     assert dummy_dispatcher.included == ["router"]
+    assert dummy_dispatcher.registered_error_handlers == [dummy_monitor]
     assert middleware_inits["db"][0][0] is dummy_database
     assert middleware_inits["throttle"][0][0] is settings
     assert middleware_inits["rate"][0][0] is settings

@@ -20,6 +20,7 @@ from app.bot.routers import setup_routers
 from app.config import get_settings
 from app.db.session import Database
 from app.logging import configure_logging, logger
+from app.services.error_monitor import ErrorMonitor
 from app.services.seeds import ensure_subscription_plans
 
 
@@ -42,6 +43,8 @@ async def main() -> None:
     )
     dp = Dispatcher()
     dp.include_router(setup_routers())
+    error_monitor = ErrorMonitor(settings=settings)
+    dp.errors.register(error_monitor)
 
     database = Database(settings=settings)
 
