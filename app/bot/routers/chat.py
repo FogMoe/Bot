@@ -256,8 +256,9 @@ def _format_non_text_payload(kind: str, message: Message) -> str:
 
 
 def _generate_card_code(plan_code: str) -> str:
-    token = secrets.token_hex(4).upper()
-    return f"{plan_code.upper()}-{token}"
+    part1 = secrets.token_hex(4).upper()
+    part2 = secrets.token_hex(8).upper()
+    return f"{plan_code.upper()}-{part1}-{part2}-FOGMOE"
 
 
 @router.message(F.photo)
