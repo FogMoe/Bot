@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from itertools import chain
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
+from aiogram.enums import MessageEntityType
 from aiogram.types import Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +40,7 @@ class RateLimitMiddleware(BaseMiddleware):
         hourly_limit = await subscription_service.get_hourly_limit(user)
         limiter = RateLimiter(session)
 
-        if event.text:
+        if event.text and self._should_consume_quota(event):
             try:
                 await limiter.increment(user, hourly_limit)
             except RateLimitExceeded:
@@ -51,3 +53,12 @@ class RateLimitMiddleware(BaseMiddleware):
                 return None
 
         return await handler(event, data)
+
+    @staticmethod
+    def _should_consume_quota(message: Message) -> bool:
+        """Ignore bare commands so only real chats count toward quota."""
+        entities = chain(message.entities or (), message.caption_entities or ())
+        for entity in entities:
+            if entity.type == MessageEntityType.BOT_COMMAND and entity.offset == 0:
+                return False
+        return True
