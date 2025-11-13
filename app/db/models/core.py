@@ -102,6 +102,21 @@ class UserSettings(Base):
     user: Mapped[User] = relationship(back_populates="settings")
 
 
+class UserImpression(Base):
+    __tablename__ = "user_impressions"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    impression: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=utc_now, onupdate=utc_now
+    )
+
+    user: Mapped[User] = relationship()
+
+
 class SubscriptionCard(Base):
     __tablename__ = "subscription_cards"
     __table_args__ = (UniqueConstraint("code", name="uq_subscription_cards_code"),)
@@ -411,6 +426,7 @@ class AuditLog(Base):
 __all__ = [
     "User",
     "UserSettings",
+    "UserImpression",
     "SubscriptionPlan",
     "SubscriptionCard",
     "UserSubscription",

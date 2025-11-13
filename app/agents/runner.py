@@ -11,6 +11,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.messages import ModelMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.model_factory import build_model_spec
 from app.agents.summary import SummaryAgent
@@ -24,6 +25,7 @@ from app.utils.datetime import utc_now
 class AgentDependencies:
     user_id: int
     conversation_id: int
+    session: AsyncSession
     http_client: httpx.AsyncClient
     memory_service: MemoryService
     history: Sequence[ModelMessage]
@@ -58,9 +60,22 @@ You provide clear answers, execute tasks, and use tools when appropriate.
 - Only call a tool when:
   1. The user explicitly requests information that requires external data or functionality, or
   2. A tool is clearly the optimal method to fulfill the request.
-- If a tool is not necessary, respond normally without calling any tool.
+- If you can answer the user's request using your internal knowledge alone, do not call any tool.
 - Never guess tool parameters. If required information is missing, ask the user to provide it.
 - Do not hallucinate tools, parameters, or capabilities that do not exist.
+
+## Tool Usage Guidelines
+1. google_search
+   - Call this tool when you need to search the internet for the latest information.
+2. execute_python_code
+   - Call this tool when you or the user needs to run Python code for complex tasks, like calculations, data processing, or testing.
+   - All results need to be printed using `print()`, otherwise they will not appear in the output.
+3. update_impression
+   - Call this tool when you need to update your impression of the user.
+4. fetch_permanent_summaries
+   - Call this tool when you need to retrieve the user's historical conversation summaries.
+5. fetch_url
+   - Call this tool to fetch and read webpage content in real-time.
 
 # Conversation Behavior
 ## Response Style
@@ -150,6 +165,7 @@ class AgentOrchestrator:
         *,
         user_id: int,
         conversation_id: int,
+        session: AsyncSession,
         history: Sequence[ModelMessage],
         latest_user_message: str,
         memory_service: MemoryService,
@@ -164,6 +180,7 @@ class AgentOrchestrator:
             deps = AgentDependencies(
                 user_id=user_id,
                 conversation_id=conversation_id,
+                session=session,
                 http_client=client,
                 memory_service=memory_service,
                 history=history,

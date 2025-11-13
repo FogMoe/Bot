@@ -13,6 +13,7 @@ from app.services.external_tools import (
     ToolServiceError,
     WebContentService,
 )
+from app.services.user_insights import UserInsightService, MAX_IMPRESSION_LENGTH
 
 
 class ToolHandler(Protocol):
@@ -83,6 +84,48 @@ class ExecutePythonCodeOutput(BaseModel):
     memory: int | None
 
 
+class UpdateImpressionInput(BaseModel):
+    impression: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_IMPRESSION_LENGTH,
+        description="New impression text, complete and self-contained description (max 500 characters)",
+    )
+
+
+class UpdateImpressionOutput(BaseModel):
+    user_id: int
+    impression: str
+    message: str
+
+
+class FetchPermanentSummariesInput(BaseModel):
+    start: int | None = Field(
+        default=None,
+        ge=1,
+        description="Start position (inclusive)",
+    )
+    end: int | None = Field(
+        default=None,
+        ge=1,
+        description="End position (inclusive)",
+    )
+
+
+class PermanentSummary(BaseModel):
+    record_id: int
+    created_at: str | None
+    summary: str
+
+
+class FetchPermanentSummariesOutput(BaseModel):
+    user_id: int
+    total: int
+    range_start: int
+    range_end: int
+    records: list[PermanentSummary]
+
+
 T = TypeVar("T")
 
 
@@ -96,6 +139,10 @@ def _web_service(ctx: RunContext) -> WebContentService:
 
 def _code_execution_service(ctx: RunContext) -> CodeExecutionService:
     return CodeExecutionService(ctx.deps.http_client, ctx.deps.tool_settings)
+
+
+def _insight_service(ctx: RunContext) -> UserInsightService:
+    return UserInsightService(ctx.deps.session)
 
 
 async def _run_with_service_errors(awaitable: Awaitable[T]) -> T:
@@ -127,6 +174,34 @@ async def execute_python_code_tool(
     return ExecutePythonCodeOutput(**payload)
 
 
+async def update_impression_tool(
+    ctx: RunContext, data: UpdateImpressionInput
+) -> UpdateImpressionOutput:
+    service = _insight_service(ctx)
+    record = await service.upsert_impression(ctx.deps.user_id, data.impression)
+    return UpdateImpressionOutput(
+        user_id=ctx.deps.user_id,
+        impression=record.impression,
+        message="Impression record updated successfully",
+    )
+
+
+async def fetch_permanent_summaries_tool(
+    ctx: RunContext, data: FetchPermanentSummariesInput
+) -> FetchPermanentSummariesOutput:
+    service = _insight_service(ctx)
+    start = data.start or 1
+    end = data.end or (start + 9)
+    payload = await service.fetch_permanent_summaries(ctx.deps.user_id, start=start, end=end)
+    return FetchPermanentSummariesOutput(
+        user_id=payload["user_id"],
+        total=payload["total"],
+        range_start=payload["range_start"],
+        range_end=payload["range_end"],
+        records=[PermanentSummary(**record) for record in payload["records"]],
+    )
+
+
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
     ToolTemplate(
         handler=google_search_tool,
@@ -142,6 +217,16 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
         handler=execute_python_code_tool,
         name="execute_python_code",
         description="Run Python code remotely and return its output",
+    ),
+    ToolTemplate(
+        handler=update_impression_tool,
+        name="update_impression",
+        description="Update permanent impression of the user",
+    ),
+    ToolTemplate(
+        handler=fetch_permanent_summaries_tool,
+        name="fetch_permanent_summaries",
+        description="Fetch user's historical conversation summaries (newest on top, max 10 results per request)",
     ),
 )
 
@@ -166,4 +251,9 @@ __all__ = [
     "FetchUrlOutput",
     "ExecutePythonCodeInput",
     "ExecutePythonCodeOutput",
+    "UpdateImpressionInput",
+    "UpdateImpressionOutput",
+    "FetchPermanentSummariesInput",
+    "FetchPermanentSummariesOutput",
+    "PermanentSummary",
 ]

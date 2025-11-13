@@ -188,6 +188,7 @@ async def handle_chat(
         agent_result = await agent.run(
             user_id=db_user.id,
             conversation_id=conversation.id,
+            session=session,
             history=history,
             latest_user_message=user_text,
             memory_service=memory_service,
