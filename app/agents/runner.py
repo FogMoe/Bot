@@ -32,7 +32,6 @@ class AgentDependencies:
 
 def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
     provider = settings.llm.provider.lower()
-    request_timeout = settings.llm.request_timeout_seconds
     if provider in {"azure", "azure_openai"} or provider.startswith("azure"):
         if not settings.llm.base_url or not settings.llm.api_version or not settings.llm.api_key:
             raise ValueError(
@@ -46,11 +45,10 @@ def _model_spec(settings: BotSettings) -> str | OpenAIChatModel:
         return OpenAIChatModel(
             settings.llm.model,
             provider=azure_provider,
-            request_timeout=request_timeout,
         )
 
     if provider in {"openai", "custom"}:
-        return OpenAIChatModel(settings.llm.model, request_timeout=request_timeout)
+        return OpenAIChatModel(settings.llm.model)
 
     provider_map = {
         "anthropic": "anthropic",
