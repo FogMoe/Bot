@@ -31,11 +31,25 @@ class OpenAICompatibleSettings(BaseModel):
     api_key: SecretStr | None = None
     base_url: HttpUrl | None = None
 
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _normalize_base_url(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class AzureProviderSettings(BaseModel):
     api_key: SecretStr | None = None
     base_url: HttpUrl | None = None
     api_version: str | None = None
+
+    @field_validator("base_url", "api_version", mode="before")
+    @classmethod
+    def _normalize_str(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class ZhipuProviderSettings(OpenAICompatibleSettings):
