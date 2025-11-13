@@ -37,14 +37,6 @@ class ToolTemplate:
         )
 
 
-class SearchToolInput(BaseModel):
-    query: str = Field(..., description="Natural language keywords or phrase to search for")
-
-
-class SearchToolOutput(BaseModel):
-    results: list[str]
-
-
 class GoogleSearchInput(BaseModel):
     query: str = Field(
         ...,
@@ -113,14 +105,6 @@ async def _run_with_service_errors(awaitable: Awaitable[T]) -> T:
         raise RuntimeError(str(exc)) from exc
 
 
-async def search_tool(ctx: RunContext, data: SearchToolInput) -> SearchToolOutput:
-    """Adapter that delegates to SearchService."""
-
-    service = _search_service(ctx)
-    results = await service.search(data.query)
-    return SearchToolOutput(results=list(results))
-
-
 async def google_search_tool(ctx: RunContext, data: GoogleSearchInput) -> GoogleSearchOutput:
     service = _search_service(ctx)
     payload = await _run_with_service_errors(service.google_search(data.query))
@@ -144,11 +128,6 @@ async def execute_python_code_tool(
 
 
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
-    ToolTemplate(
-        handler=search_tool,
-        name="web_search",
-        description="Perform a lightweight web-style search and return short snippets.",
-    ),
     ToolTemplate(
         handler=google_search_tool,
         name="google_search",
@@ -181,8 +160,6 @@ class ToolRegistry:
 __all__ = [
     "ToolRegistry",
     "ToolTemplate",
-    "SearchToolInput",
-    "SearchToolOutput",
     "GoogleSearchInput",
     "GoogleSearchOutput",
     "FetchUrlInput",

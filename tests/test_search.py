@@ -1,4 +1,4 @@
-"""Tests for the search + external tool service layer."""
+"""Tests for the external tool service layer."""
 
 from __future__ import annotations
 
@@ -15,22 +15,6 @@ from app.services.external_tools import (
     ToolServiceError,
     WebContentService,
 )
-
-
-@pytest.mark.asyncio
-async def test_search_returns_placeholder_result():
-    async with httpx.AsyncClient() as client:
-        service = SearchService(client)
-        results = await service.search("python testing")
-    assert results == ["Search result placeholder for: python testing"]
-
-
-@pytest.mark.asyncio
-async def test_search_ignores_empty_query():
-    async with httpx.AsyncClient() as client:
-        service = SearchService(client)
-        results = await service.search("   ")
-    assert results == []
 
 
 @pytest.mark.asyncio
