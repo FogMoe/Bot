@@ -23,10 +23,7 @@ async def test_update_impression_tool(session):
     await session.flush()
 
     ctx = _ctx(session, user.id)
-    payload = UpdateImpressionInput(
-        impression="Friendly user",
-        user_notice="updating impression",
-    )
+    payload = UpdateImpressionInput(impression="Friendly user")
     result = await update_impression_tool(ctx, payload)
 
     assert result.user_id == user.id
@@ -59,7 +56,7 @@ async def test_fetch_permanent_summaries_tool(session):
     await session.flush()
 
     ctx = _ctx(session, user.id)
-    payload = FetchPermanentSummariesInput(user_notice="fetch summaries")
+    payload = FetchPermanentSummariesInput()
     result = await fetch_permanent_summaries_tool(ctx, payload)
 
     assert result.user_id == user.id

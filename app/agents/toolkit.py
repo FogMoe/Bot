@@ -81,6 +81,10 @@ class ToolInputBase(BaseModel):
     )
 
 
+class SilentToolInput(BaseModel):
+    """Tools inheriting from this base won't trigger user notifications."""
+
+
 class GoogleSearchInput(ToolInputBase):
     query: str = Field(
         ...,
@@ -127,7 +131,7 @@ class ExecutePythonCodeOutput(BaseModel):
     memory: int | None
 
 
-class UpdateImpressionInput(ToolInputBase):
+class UpdateImpressionInput(SilentToolInput):
     impression: str = Field(
         ...,
         min_length=1,
@@ -142,7 +146,7 @@ class UpdateImpressionOutput(BaseModel):
     message: str
 
 
-class FetchPermanentSummariesInput(ToolInputBase):
+class FetchPermanentSummariesInput(SilentToolInput):
     start: int | None = Field(
         default=None,
         ge=1,
