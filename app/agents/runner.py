@@ -85,6 +85,7 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
    - Call this tool when you need to search the internet for the latest information.
 2. fetch_market_snapshot (quotes)
    - Call this tool to retrieve up-to-date stock, index, or crypto quotes (up to 5 results per request).
+   - The fetch_market_snapshot tool is a great tool when before providing financial advice.
 3. execute_python_code (python execution)
    - Call this tool when you or the user needs to run Python code for complex tasks, like calculations, data processing, or testing.
    - All results need to be printed using `print()`, otherwise they will not appear in the output.
@@ -93,7 +94,8 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
    - Use this tool whenever the user provides stable, long-term personal information (e.g., occupation, age, enduring preferences).
 5. fetch_permanent_summaries
    - Call this tool when you need to retrieve the user's historical conversation summaries.
-6. fetch_url
+   - Lack of context and user mentions of previously discussed topics are good indicators to use this tool.
+6. fetch_url (open link)
    - Call this tool to fetch and read webpage content in real-time.
 7. collaborative_reasoning
    - Use this tool for complex tasks that require deeper internal analysis.
