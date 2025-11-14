@@ -24,7 +24,7 @@ class MediaCaptionAgent:
             model=model_spec,
             name="MediaCaptioner",
             instructions=(
-                "You describe Telegram media for a text-only assistant. "
+                "You describe media for a text-only assistant. "
                 "Always respond in English, prefer concise paragraphs, "
                 "include visible text, and never exceed 1000 characters."
             ),
