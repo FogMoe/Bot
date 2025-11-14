@@ -109,10 +109,33 @@ async def handle_activate(
         return
 
     code = parts[1].strip()
+    logger.info("activate_card_attempt", user_id=db_user.id, code=code)
     service = SubscriptionService(session)
     try:
         subscription = await service.redeem_card(db_user, code)
-    except CardNotFound:
+        logger.info(
+            "activate_card_redeemed",
+            user_id=db_user.id,
+            subscription_id=getattr(subscription, "id", None),
+            plan_id=subscription.plan_id,
+            expires_at=subscription.expires_at,
+        )
+    except CardNotFound as e:
+        logger.info("activate_card_not_found", user_id=db_user.id, code=code, error=str(e))
+        await answer_with_retry(
+            message,
+            i18n.gettext("activate.invalid", locale=locale),
+            parse_mode=None,
+        )
+        return
+    except Exception as e:
+        logger.error(
+            "activate_card_error",
+            user_id=db_user.id,
+            code=code,
+            error=str(e),
+            exc_info=True,
+        )
         await answer_with_retry(
             message,
             i18n.gettext("activate.invalid", locale=locale),
@@ -120,12 +143,24 @@ async def handle_activate(
         )
         return
 
+    # Refresh subscription to get latest state
     try:
         await session.refresh(subscription)
-    except AttributeError:
-        pass
+    except Exception as e:
+        logger.warning(
+            "activate_refresh_failed",
+            subscription_id=getattr(subscription, "id", None),
+            error=str(e),
+        )
+
+    # Validate subscription has expires_at
     if subscription.expires_at is None:
-        logger.warning("subscription_expires_missing", subscription_id=subscription.id)
+        logger.error(
+            "subscription_expires_missing",
+            subscription_id=getattr(subscription, "id", None),
+            plan_id=subscription.plan_id,
+            status=getattr(subscription, "status", "unknown"),
+        )
         await answer_with_retry(
             message,
             i18n.gettext("activate.invalid", locale=locale),
@@ -133,8 +168,15 @@ async def handle_activate(
         )
         return
 
+    # Get plan info and send success message
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
+    logger.info(
+        "activate_card_success",
+        user_id=db_user.id,
+        plan=plan_name,
+        expires_at=subscription.expires_at,
+    )
     await answer_with_retry(
         message,
         i18n.gettext(

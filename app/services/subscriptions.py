@@ -93,7 +93,11 @@ class SubscriptionService:
         return subscription
 
     async def redeem_card(self, user: User, code: str) -> UserSubscription:
+        from app.logging import logger
+        
         now = utc_now()
+        logger.info("redeem_card_start", user_id=user.id, code=code)
+        
         card_stmt = (
             select(SubscriptionCard)
             .where(
@@ -108,15 +112,27 @@ class SubscriptionService:
         result = await self.session.execute(card_stmt)
         card = result.scalar_one_or_none()
         if card is None:
+            logger.info("redeem_card_not_found", user_id=user.id, code=code)
             raise CardNotFound("Card not found or already redeemed.")
 
+        logger.info(
+            "redeem_card_found",
+            user_id=user.id,
+            card_id=card.id,
+            plan_id=card.plan_id,
+            valid_days=card.valid_days,
+        )
+        
         card.status = "redeemed"
         card.redeemed_by_user_id = user.id
         card.redeemed_at = now
         plan = await self.session.get(SubscriptionPlan, card.plan_id)
         if plan is None:
+            logger.error("redeem_card_plan_not_found", card_id=card.id, plan_id=card.plan_id)
             raise CardNotFound("Associated plan no longer exists.")
 
+        logger.info("redeem_card_plan_loaded", plan_code=plan.code, plan_name=plan.name)
+        
         subs_stmt = (
             select(UserSubscription)
             .where(
@@ -128,13 +144,20 @@ class SubscriptionService:
             .with_for_update()
         )
         existing_subs = list((await self.session.execute(subs_stmt)).scalars())
+        logger.info("redeem_card_existing_subs", count=len(existing_subs))
 
         duration_days = card.valid_days or self.settings.subscriptions.subscription_duration_days
         duration = timedelta(days=duration_days)
+        logger.info("redeem_card_duration", days=duration_days)
 
         stacked = self._extend_same_plan(existing_subs, plan, duration, now)
         if stacked:
             stacked.source_card_id = card.id
+            logger.info(
+                "redeem_card_stacked",
+                subscription_id=stacked.id,
+                expires_at=stacked.expires_at,
+            )
             await self.session.flush()
             return stacked
 
@@ -146,6 +169,13 @@ class SubscriptionService:
         )
         self.session.add(new_sub)
         self._schedule_new_subscription(new_sub, plan, existing_subs, duration, now)
+        logger.info(
+            "redeem_card_new_subscription",
+            plan_id=new_sub.plan_id,
+            status=new_sub.status,
+            starts_at=new_sub.starts_at,
+            expires_at=new_sub.expires_at,
+        )
         await self.session.flush()
         return new_sub
 
