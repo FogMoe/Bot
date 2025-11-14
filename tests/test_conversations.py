@@ -12,6 +12,7 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
+    SystemPromptPart,
     UserPromptPart,
 )
 
@@ -196,4 +197,31 @@ async def test_estimate_tokens_includes_tool_payload(session, monkeypatch):
     assert "TOOL_CALL[fetch_url]" in captured["text"]
     assert "https://example.com" in captured["text"]
     assert "TOOL_RETURN[fetch_url]" in captured["text"]
+    assert count == len(captured["text"])
+
+
+@pytest.mark.asyncio
+async def test_estimate_tokens_includes_system_prompt(session, monkeypatch):
+    service = ConversationService(session)
+    captured: dict[str, str] = {}
+
+    def fake_estimate(text: str) -> int:
+        captured["text"] = text
+        return len(text)
+
+    monkeypatch.setattr(conversations_module, "estimate_tokens", fake_estimate)
+
+    messages = [
+        ModelRequest(
+            parts=[
+                SystemPromptPart(content="Follow the rules."),
+                UserPromptPart(content="hello"),
+            ]
+        ),
+        ModelResponse(parts=[TextPart(content="hi")]),
+    ]
+
+    count = service._estimate_tokens(messages)
+    assert "SYSTEM_PROMPT" in captured["text"]
+    assert "Follow the rules." in captured["text"]
     assert count == len(captured["text"])

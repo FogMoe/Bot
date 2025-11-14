@@ -13,6 +13,7 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
+    SystemPromptPart,
     UserPromptPart,
 )
 from pydantic_ai.run import AgentRunResult
@@ -225,6 +226,8 @@ class ConversationService:
                 for part in message.parts:
                     if isinstance(part, UserPromptPart):
                         buffer.append(str(part.content))
+                    elif isinstance(part, SystemPromptPart):
+                        buffer.append(f"SYSTEM_PROMPT: {str(part.content)}")
                     elif isinstance(part, ToolReturnPart):
                         buffer.append(
                             f"TOOL_RETURN[{part.tool_name}]: {_stringify_tool_content(part.content)}"

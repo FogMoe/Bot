@@ -6,12 +6,14 @@ import asyncio
 import contextlib
 import secrets
 from datetime import timezone
+from time import perf_counter
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from aiogram.enums import ChatAction
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.usage import RunUsage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +21,7 @@ from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
 from app.bot.utils.telegram import answer_with_retry
 from app.config import get_settings
-from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
+from app.db.models.core import AgentRun, SubscriptionCard, SubscriptionPlan, User
 from app.i18n import I18nService
 from app.services.conversations import ConversationService
 from app.services.exceptions import CardNotFound
@@ -31,6 +33,7 @@ from app.logging import logger
 router = Router()
 settings = get_settings()
 REPLY_CONTEXT_CHAR_LIMIT = 600
+RESULT_SUMMARY_CHAR_LIMIT = 2000
 
 
 @router.message(CommandStart())
@@ -345,6 +348,7 @@ async def _process_user_prompt(
             logger.warning("tool_notification_send_failed", text=text)
 
     typing_task = asyncio.create_task(_send_typing_action(message))
+    started_at = perf_counter()
     try:
         agent_result = await agent.run(
             user_id=db_user.id,
@@ -357,6 +361,7 @@ async def _process_user_prompt(
             user_profile=user_profile,
             tool_notification_cb=notify_tool_usage,
         )
+        latency_ms = int((perf_counter() - started_at) * 1000)
     except Exception as exc:
         await answer_with_retry(
             message,
@@ -369,6 +374,7 @@ async def _process_user_prompt(
         with contextlib.suppress(asyncio.CancelledError):
             await typing_task
 
+    usage = agent_result.usage()
     fragments = list(iter_fragments(agent_result.output))
     for idx, (plain_fragment, formatted_fragment) in enumerate(fragments):
         try:
@@ -382,6 +388,18 @@ async def _process_user_prompt(
         history_record=history_record,
         summarizer=agent.summarize_history,
     )
+    updated_history_record = await conversation_service.get_history_record(conversation)
+    try:
+        await _record_agent_run(
+            session,
+            conversation_id=conversation.id,
+            trigger_message_id=getattr(updated_history_record, "id", None),
+            run_usage=usage,
+            latency_ms=latency_ms,
+            output_text=agent_result.output,
+        )
+    except Exception:
+        logger.warning("agent_run_record_failed", exc_info=True)
 
 
 def _compose_user_input_text(message: Message) -> str:
@@ -433,6 +451,41 @@ async def _send_typing_action(message: Message) -> None:
             await asyncio.sleep(4)
     except asyncio.CancelledError:
         pass
+
+
+async def _record_agent_run(
+    session: AsyncSession,
+    *,
+    conversation_id: int,
+    trigger_message_id: int | None,
+    run_usage: RunUsage | None,
+    latency_ms: int,
+    output_text: str | None,
+) -> None:
+    usage = run_usage if run_usage and run_usage.has_values() else None
+    agent_run = AgentRun(
+        conversation_id=conversation_id,
+        trigger_message_id=trigger_message_id,
+        status="succeeded",
+        model=settings.llm.model,
+        latency_ms=latency_ms,
+        token_usage_prompt=(usage.input_tokens if usage else None),
+        token_usage_completion=(usage.output_tokens if usage else None),
+        result_summary=_truncate_result_summary(output_text),
+    )
+    session.add(agent_run)
+    await session.flush()
+
+
+def _truncate_result_summary(text: str | None) -> str | None:
+    if not text:
+        return None
+    trimmed = text.strip()
+    if not trimmed:
+        return None
+    if len(trimmed) <= RESULT_SUMMARY_CHAR_LIMIT:
+        return trimmed
+    return f"{trimmed[: RESULT_SUMMARY_CHAR_LIMIT].rstrip()}..."
 
 
 async def _handle_non_text(
