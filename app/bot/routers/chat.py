@@ -462,19 +462,8 @@ async def _record_agent_run(
     latency_ms: int,
     output_text: str | None,
 ) -> None:
-    usage = run_usage if run_usage and run_usage.has_values() else None
-    agent_run = AgentRun(
-        conversation_id=conversation_id,
-        trigger_message_id=trigger_message_id,
-        status="succeeded",
-        model=settings.llm.model,
-        latency_ms=latency_ms,
-        token_usage_prompt=(usage.input_tokens if usage else None),
-        token_usage_completion=(usage.output_tokens if usage else None),
-        result_summary=_truncate_result_summary(output_text),
-    )
-    session.add(agent_run)
-    await session.flush()
+    # AgentRun persistence temporarily disabled; keep placeholder for future logging.
+    return None
 
 
 def _truncate_result_summary(text: str | None) -> str | None:
