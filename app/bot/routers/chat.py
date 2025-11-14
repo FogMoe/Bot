@@ -93,6 +93,21 @@ async def handle_status(
     await answer_with_retry(message, summary, parse_mode=None)
 
 
+@router.message(Command("help"))
+async def handle_help(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
+    text = i18n.gettext("help.summary", locale=locale)
+    await answer_with_retry(message, text, parse_mode=None)
+
+
 @router.message(Command("activate"))
 async def handle_activate(
     message: Message,

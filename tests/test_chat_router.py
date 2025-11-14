@@ -15,6 +15,7 @@ from app.bot.routers import chat as chat_router
 from app.bot.routers.chat import (
     handle_activate,
     handle_chat,
+    handle_help,
     handle_issue_card,
     handle_new_conversation,
     handle_status,
@@ -129,6 +130,19 @@ async def test_handle_status_shows_subscription(session):
     text, _ = message.answers[0]
     assert "Plan: Free" in text
     assert "Status: Active" in text
+
+
+@pytest.mark.asyncio
+async def test_handle_help_returns_placeholder(session):
+    user = User(telegram_id=140, username="helper", language_code="en")
+    session.add(user)
+    await session.flush()
+
+    message = DummyMessage("/help", DummyFromUser(user_id=user.telegram_id))
+    await handle_help(message, session, db_user=user)
+
+    assert message.answers
+    assert "/start" in message.answers[0][0]
 
 
 def test_compose_reaction_text_handles_multiple():
