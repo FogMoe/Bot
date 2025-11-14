@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.messages import ModelMessage
-from app.agents.collaborator import CollaboratorAgent
+from app.agents.collaborator import CollaboratorAgent, CollaboratorTurnOutput
 from app.services.external_tools import (
     CodeExecutionService,
     SearchService,
@@ -174,6 +174,9 @@ class CollaborativeReasoningInput(BaseModel):
     )
 
 
+COLLABORATION_MAX_AUTO_ROUNDS = 5
+
+
 class CollaborativeReasoningOutput(BaseModel):
     result: str = Field(..., description="Summary of the collaborator's current analysis")
     task_completed: bool = Field(
@@ -280,21 +283,38 @@ async def collaborative_reasoning_tool(
 
     conversation_history: Sequence[ModelMessage] = threads.get(session_id, ())
 
-    topic_description = data.topic.strip()
-    reasoning_prompt = (
-        "You are collaborating with me on the following problem.\n"
-        f"{topic_description}\n\n"
-        "Continue the dialogue, add fresh insights, and optionally propose follow-up checks. "
-        "Keep references to prior discussion consistent with the thread history."
-    )
-    run_result = await collaborator.run(reasoning_prompt, message_history=conversation_history)
-    threads[session_id] = list(run_result.all_messages())
+    primary_topic = data.topic.strip()
+    focus = primary_topic
+    last_output: CollaboratorTurnOutput | None = None
 
-    turn_output = run_result.output
+    for _ in range(COLLABORATION_MAX_AUTO_ROUNDS):
+        reasoning_prompt = (
+            "You are collaborating with me on the following problem.\n"
+            f"Primary objective:\n{primary_topic}\n\n"
+            f"Current focus:\n{focus}\n\n"
+            "Continue the dialogue, add fresh insights, and optionally propose follow-up checks. "
+            "Keep references to prior discussion consistent with the thread history."
+        )
+        run_result = await collaborator.run(
+            reasoning_prompt, message_history=conversation_history
+        )
+        conversation_history = list(run_result.all_messages())
+        threads[session_id] = conversation_history
+
+        last_output = run_result.output
+        if last_output.task_completed or not last_output.next_step:
+            break
+        focus = last_output.next_step.strip()
+        if not focus:
+            break
+
+    if last_output is None:
+        raise RuntimeError("Collaborator agent produced no output")
+
     return CollaborativeReasoningOutput(
-        result=turn_output.result,
-        task_completed=turn_output.task_completed,
-        next_step=turn_output.next_step,
+        result=last_output.result,
+        task_completed=last_output.task_completed,
+        next_step=last_output.next_step,
         session_id=session_id,
     )
 

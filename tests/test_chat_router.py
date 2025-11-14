@@ -276,7 +276,7 @@ async def test_handle_new_conversation_archives_and_starts_fresh(session):
     await handle_new_conversation(message, session, agent=FakeAgent(), db_user=user)
 
     texts = [text for text, _ in message.answers]
-    assert any("Archived" in text for text in texts)
+    assert any("Cleared" in text for text in texts)
 
     conversations = (await session.execute(select(Conversation))).scalars().all()
     assert len(conversations) == 2
