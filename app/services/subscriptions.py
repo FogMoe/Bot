@@ -179,6 +179,27 @@ class SubscriptionService:
         await self.session.flush()
         return new_sub
 
+    async def expire_outdated_subscriptions(self, user: User) -> None:
+        """Mark any elapsed active/pending subscriptions as expired."""
+
+        now = utc_now()
+        stmt = (
+            select(UserSubscription)
+            .where(
+                UserSubscription.user_id == user.id,
+                UserSubscription.status.in_(ACTIVE_STATUSES),
+                UserSubscription.expires_at.is_not(None),
+                UserSubscription.expires_at <= now,
+            )
+        )
+        result = await self.session.execute(stmt)
+        changed = False
+        for subscription in result.scalars():
+            subscription.status = "expired"
+            changed = True
+        if changed:
+            await self.session.flush()
+
     # Internal helpers -------------------------------------------------
 
     async def _get_default_plan(self) -> SubscriptionPlan | None:

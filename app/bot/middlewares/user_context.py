@@ -41,6 +41,8 @@ class UserContextMiddleware(BaseMiddleware):
             )
             return
 
+        subscription_service = SubscriptionService(session)
+
         stmt = select(User).where(User.telegram_id == from_user.id)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
@@ -55,8 +57,9 @@ class UserContextMiddleware(BaseMiddleware):
             session.add(user)
             await session.flush()
 
-            subscription_service = SubscriptionService(session)
             await subscription_service.ensure_default_subscription(user)
+
+        await subscription_service.expire_outdated_subscriptions(user)
 
         user.last_seen_at = utc_now()
         data["db_user"] = user

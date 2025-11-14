@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,7 @@ from app.bot.middlewares.user_context import UserContextMiddleware
 from app.bot.routers import chat as chat_router
 from app.bot.routers.chat import handle_start
 from app.db.models.core import SubscriptionPlan, User, UserSubscription
+from app.utils.datetime import utc_now
 
 
 class DummyFromUser:
@@ -116,6 +118,49 @@ async def test_user_context_blocks_group_chat(session):
 
     assert message.answers
     assert "private chat" in message.answers[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_user_context_expires_outdated_subscriptions(session):
+    middleware = UserContextMiddleware()
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    user = User(telegram_id=12_345, username="expired", language_code="en")
+    session.add_all([plan, user])
+    await session.flush()
+
+    expired_sub = UserSubscription(
+        user_id=user.id,
+        plan_id=plan.id,
+        status="active",
+        priority=plan.priority,
+        starts_at=utc_now() - timedelta(days=10),
+        expires_at=utc_now() - timedelta(days=1),
+    )
+    session.add(expired_sub)
+    await session.flush()
+
+    message = DummyMessage(from_user=DummyFromUser(user_id=user.telegram_id))
+    data = {"session": session}
+
+    async def handler(event, ctx):
+        return "ok"
+
+    await middleware(handler, message, data)
+
+    refreshed = (
+        await session.execute(
+            select(UserSubscription).where(UserSubscription.id == expired_sub.id)
+        )
+    ).scalar_one()
+    assert refreshed.status == "expired"
 
 
 @pytest.mark.asyncio
