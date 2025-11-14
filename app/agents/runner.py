@@ -41,6 +41,7 @@ class AgentDependencies:
     user_profile: dict[str, str] | None = None
     impression: str | None = None
     collaborator_agent: CollaboratorAgent | None = None
+    collaborator_threads: dict[str, list[ModelMessage]] = field(default_factory=dict)
 
 
 def build_agent(

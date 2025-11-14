@@ -129,21 +129,24 @@ class FetchPermanentSummariesOutput(BaseModel):
 
 
 class CollaborativeReasoningInput(BaseModel):
-    prompt: str = Field(..., description="Core question or problem to discuss")
-    context: str | None = Field(
-        default=None,
-        description="Optional supplemental information or constraints",
+    topic: str = Field(
+        ...,
+        min_length=1,
+        description="Describe what the primary agent intends to discuss with collaborators, including key background, issues, and constraints",
     )
-    rounds: int = Field(
-        default=2,
-        ge=1,
-        le=3,
-        description="Number of internal reasoning rounds",
+    session_id: str | None = Field(
+        default=None,
+        description="Optional session identifier; if provided, will attempt to continue the corresponding collaboration thread",
+    )
+    reset_session: bool = Field(
+        default=False,
+        description="If True, will forcefully clear the history of the specified session_id and start over",
     )
 
 
 class CollaborativeReasoningOutput(BaseModel):
     result: str = Field(..., description="Final response from the collaborator agent")
+    session_id: str = Field(..., description="Session identifier, which can be used for continued collaboration")
 
 
 T = TypeVar("T")
@@ -229,42 +232,27 @@ async def collaborative_reasoning_tool(
     if collaborator is None:
         raise RuntimeError("Collaborator agent is not configured")
 
-    prompt_parts = []
-    if data.context:
-        prompt_parts.append("Context:\n" + data.context.strip())
-    prompt_parts.append("Task:\n" + data.prompt.strip())
-    task_description = "\n\n".join(prompt_parts)
+    if data.session_id and data.session_id.strip():
+        session_id = data.session_id.strip()
+    else:
+        session_id = f"default:{ctx.deps.conversation_id}"
+    threads = getattr(ctx.deps, "collaborator_threads", None)
+    if threads is None:
+        raise RuntimeError("Collaborator thread store is missing from dependencies")
+    if data.reset_session:
+        threads.pop(session_id, None)
 
-    conversation_history: Sequence[ModelMessage] = []
-    reasoning_rounds = data.rounds
+    conversation_history: Sequence[ModelMessage] = threads.get(session_id, ())
 
-    async def _run_with_history(user_prompt: str, history: Sequence[ModelMessage]) -> tuple[str, list[ModelMessage]]:
-        run_result = await collaborator.run(user_prompt, message_history=history)
-        return run_result.output, list(run_result.all_messages())
-
-    for round_index in range(1, reasoning_rounds + 1):
-        reasoning_prompt = (
-            "You are collaborating with me on the following problem.\n"
-            f"{task_description}\n\n"
-            f"Round {round_index}/{reasoning_rounds}: Expand the reasoning, explore alternative angles, and highlight risks. "
-            "Focus on new information compared to previous rounds."
-        )
-        _, conversation_history = await _run_with_history(reasoning_prompt, conversation_history)
-
-        reflection_prompt = (
-            "Reflect on your latest answer. What assumptions need verification, and what should you investigate next? "
-            "Answer as internal notes to yourself."
-        )
-        _, conversation_history = await _run_with_history(reflection_prompt, conversation_history)
-
-    summary_prompt = (
-        "You have completed multiple internal rounds of analysis for the task below.\n"
-        f"{task_description}\n\n"
-        "Summarize the full reasoning, resolve open questions, and present the best final answer."
+    topic_description = data.topic.strip()
+    reasoning_prompt = (
+        "You are collaborating with me on the following problem.\n"
+        f"{topic_description}\n\n"
     )
-    final_run = await collaborator.run(summary_prompt, message_history=conversation_history)
+    run_result = await collaborator.run(reasoning_prompt, message_history=conversation_history)
+    threads[session_id] = list(run_result.all_messages())
 
-    return CollaborativeReasoningOutput(result=final_run.output)
+    return CollaborativeReasoningOutput(result=run_result.output, session_id=session_id)
 
 
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
@@ -296,7 +284,7 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
     ToolTemplate(
         handler=collaborative_reasoning_tool,
         name="collaborative_reasoning",
-        description="Invoke an internal collaborator agent for deeper multi-step reasoning",
+        description="Invoke an internal collaborator agent for deeper multi-step reasoning with resumable internal dialogues",
     ),
 )
 
