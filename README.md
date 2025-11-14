@@ -86,3 +86,9 @@ pytest          # 运行全部单测
 # 如需覆盖率：pytest --cov=app （需安装 pytest-cov）
 # 集成测试包含在默认 test suite（tests/test_integration.py）中，确保订阅/配额/对话/记忆链路完整。
 ```
+
+## 管理员命令
+- /issuecard <plan_code> [days] [card_code] - 生成订阅卡
+  - 仅 `BOT_ADMIN_TELEGRAM_ID` 指定的管理员可用，用于创建新的订阅卡。
+- /announce <text> - 向所有用户广播公告
+  - 仅 `BOT_ADMIN_TELEGRAM_ID` 指定的管理员可用，会把公告文本发送给所有机器人用户。

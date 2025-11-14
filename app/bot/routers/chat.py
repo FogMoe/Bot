@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runner import AgentOrchestrator
 from app.bot.utils.messages import iter_fragments
-from app.bot.utils.telegram import answer_with_retry
+from app.bot.utils.telegram import answer_with_retry, bot_send_with_retry
 from app.config import get_settings
 from app.db.models.core import AgentRun, SubscriptionCard, SubscriptionPlan, User
 from app.i18n import I18nService
@@ -280,6 +280,52 @@ async def handle_issue_card(
         f"Card generated: {card_code}\nPlan: {plan.name}\nDuration: {effective_days} days",
         parse_mode=None,
     )
+
+
+@router.message(Command("announce"))
+async def handle_announce(
+    message: Message,
+    session: AsyncSession,
+    db_user: User | None = None,
+) -> None:
+    if settings.admin_telegram_id is None or message.from_user is None:
+        return
+    if message.from_user.id != settings.admin_telegram_id:
+        await answer_with_retry(message, "Unauthorized", parse_mode=None)
+        return
+
+    text_parts = message.text.split(maxsplit=1) if message.text else []
+    if len(text_parts) < 2 or not text_parts[1].strip():
+        await answer_with_retry(message, "Usage: /announce <text>", parse_mode=None)
+        return
+
+    announcement = text_parts[1].strip()
+    stmt = select(User.telegram_id).where(
+        User.status.in_(("active", "pending")),
+        User.telegram_id != settings.admin_telegram_id,
+    )
+    result = await session.execute(stmt)
+    recipients = [telegram_id for telegram_id in result.scalars().all() if telegram_id]
+
+    sent = 0
+    failed = 0
+    for chat_id in recipients:
+        try:
+            await bot_send_with_retry(
+                message.bot,
+                chat_id=chat_id,
+                text=announcement,
+                parse_mode=None,
+            )
+            sent += 1
+        except Exception:
+            failed += 1
+            logger.warning("announce_send_failed", chat_id=chat_id, exc_info=True)
+
+    summary = f"Announcement sent to {sent} users."
+    if failed:
+        summary += f" Failed deliveries: {failed}."
+    await answer_with_retry(message, summary, parse_mode=None)
 
 
 @router.message(Command("new"))

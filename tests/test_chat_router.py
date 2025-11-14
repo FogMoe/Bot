@@ -13,6 +13,7 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 
 from app.bot.routers import chat as chat_router
 from app.bot.routers.chat import (
+    handle_announce,
     handle_activate,
     handle_chat,
     handle_help,
@@ -432,3 +433,54 @@ async def test_handle_issue_card_unauthorized(session):
     await handle_issue_card(message, session, db_user=user)
 
     assert message.answers and message.answers[0][0] == "Unauthorized"
+
+
+@pytest.mark.asyncio
+async def test_handle_announce_requires_admin(session):
+    previous_admin = chat_router.settings.admin_telegram_id
+    chat_router.settings.admin_telegram_id = 4242
+    user = User(telegram_id=610, username="user", language_code="en")
+    session.add(user)
+    await session.flush()
+
+    message = DummyMessage("/announce hello", DummyFromUser(user_id=user.telegram_id))
+    try:
+        await handle_announce(message, session, db_user=user)
+    finally:
+        chat_router.settings.admin_telegram_id = previous_admin
+
+    assert message.answers and message.answers[0][0] == "Unauthorized"
+
+
+@pytest.mark.asyncio
+async def test_handle_announce_broadcasts(session, monkeypatch):
+    previous_admin = chat_router.settings.admin_telegram_id
+    admin = User(telegram_id=700, username="admin", language_code="en")
+    active_user = User(telegram_id=701, username="active", language_code="en")
+    pending_user = User(telegram_id=702, username="pending", language_code="en", status="pending")
+    blocked_user = User(telegram_id=703, username="blocked", language_code="en", status="blocked")
+    session.add_all([admin, active_user, pending_user, blocked_user])
+    await session.flush()
+
+    chat_router.settings.admin_telegram_id = admin.telegram_id
+    sent_messages: list[tuple[int, str]] = []
+
+    async def fake_send(bot, *, chat_id: int, text: str, parse_mode=None):  # type: ignore[override]
+        sent_messages.append((chat_id, text))
+
+    monkeypatch.setattr(chat_router, "bot_send_with_retry", fake_send)
+
+    message = DummyMessage("/announce Maintenance window", DummyFromUser(user_id=admin.telegram_id))
+    message.bot = object()
+
+    try:
+        await handle_announce(message, session, db_user=admin)
+    finally:
+        chat_router.settings.admin_telegram_id = previous_admin
+
+    assert sent_messages == [
+        (active_user.telegram_id, "Maintenance window"),
+        (pending_user.telegram_id, "Maintenance window"),
+    ]
+    assert message.answers
+    assert "Announcement sent to 2 users." in message.answers[0][0]
