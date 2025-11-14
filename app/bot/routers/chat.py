@@ -25,6 +25,7 @@ from app.services.conversations import ConversationService
 from app.services.exceptions import CardNotFound
 from app.services.memory import MemoryService
 from app.services.subscriptions import SubscriptionService
+from app.logging import logger
 
 router = Router()
 settings = get_settings()
@@ -263,6 +264,12 @@ async def handle_chat(
     history = conversation_service.deserialize_history(history_record)
     prior_summary = await conversation_service.get_prior_summary(conversation)
 
+    async def notify_tool_usage(text: str) -> None:
+        try:
+            await answer_with_retry(message, text, parse_mode=None)
+        except Exception:
+            logger.warning("tool_notification_send_failed", text=text)
+
     typing_task = asyncio.create_task(_send_typing_action(message))
     try:
         agent_result = await agent.run(
@@ -273,8 +280,9 @@ async def handle_chat(
             latest_user_message=user_text,
             memory_service=memory_service,
             prior_summary=prior_summary,
-        user_profile=user_profile,
-    )
+            user_profile=user_profile,
+            tool_notification_cb=notify_tool_usage,
+        )
     except Exception as exc:
         await answer_with_retry(
             message,

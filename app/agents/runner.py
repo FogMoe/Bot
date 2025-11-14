@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Literal, Sequence
+from typing import Awaitable, Callable, Literal, Sequence
 
 import httpx
 from pydantic_ai import Agent, RunContext
@@ -43,6 +43,7 @@ class AgentDependencies:
     collaborator_agent: CollaboratorAgent | None = None
     collaborator_threads: dict[str, list[ModelMessage]] = field(default_factory=dict)
     environment: Literal["dev", "staging", "prod"] = "dev"
+    tool_notification_cb: Callable[[str], Awaitable[None]] | None = None
 
 
 def build_agent(
@@ -209,6 +210,7 @@ class AgentOrchestrator:
         memory_service: MemoryService,
         prior_summary: str | None = None,
         user_profile: dict[str, str] | None = None,
+        tool_notification_cb: Callable[[str], Awaitable[None]] | None = None,
     ) -> AgentRunResult[str]:
         if not latest_user_message:
             raise ValueError("latest_user_message must not be empty")
@@ -230,6 +232,7 @@ class AgentOrchestrator:
                 impression=user_impression,
                 collaborator_agent=self.collaborator_agent,
                 environment=self.settings.environment,
+                tool_notification_cb=tool_notification_cb,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):

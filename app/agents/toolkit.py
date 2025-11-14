@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar
+from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar, Callable
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
@@ -25,6 +25,7 @@ from app.agents.tool_logging import (
     serialize_tool_payload,
     should_log_tool_call,
 )
+from app.logging import logger
 
 
 class ToolHandler(Protocol):
@@ -47,14 +48,14 @@ class ToolTemplate:
         async def _logged_handler(*args: Any, **kwargs: Any) -> object:
             ctx = extract_ctx(args, kwargs, self.takes_ctx)
             should_log = should_log_tool_call(ctx)
+            tool_input = extract_tool_arguments(args, kwargs, self.takes_ctx)
             if should_log:
                 log_tool_event(
                     self.name,
                     "request",
-                    serialize_tool_payload(
-                        extract_tool_arguments(args, kwargs, self.takes_ctx)
-                    ),
+                    serialize_tool_payload(tool_input),
                 )
+            await _maybe_notify_user(ctx, tool_input)
             result = await original_handler(*args, **kwargs)
             if should_log:
                 log_tool_event(self.name, "response", serialize_tool_payload(result))
@@ -70,7 +71,17 @@ class ToolTemplate:
         )
 
 
-class GoogleSearchInput(BaseModel):
+class ToolInputBase(BaseModel):
+    user_notice: str = Field(
+        min_length=1,
+        max_length=50,
+        description=("User-facing message displayed in user's language when this tool runs\n"
+                     'For example: "I am helping you look up relevant information…"'
+        ),
+    )
+
+
+class GoogleSearchInput(ToolInputBase):
     query: str = Field(
         ...,
         description=(
@@ -85,7 +96,7 @@ class GoogleSearchOutput(BaseModel):
     organic_results: list[dict[str, Any]]
 
 
-class FetchUrlInput(BaseModel):
+class FetchUrlInput(ToolInputBase):
     url: str = Field(..., description="Fully qualified URL to retrieve")
 
 
@@ -96,7 +107,7 @@ class FetchUrlOutput(BaseModel):
     content: str
 
 
-class ExecutePythonCodeInput(BaseModel):
+class ExecutePythonCodeInput(ToolInputBase):
     source_code: str = Field(..., description="Python source code snippet to execute")
     stdin: str | None = Field(
         default=None,
@@ -116,7 +127,7 @@ class ExecutePythonCodeOutput(BaseModel):
     memory: int | None
 
 
-class UpdateImpressionInput(BaseModel):
+class UpdateImpressionInput(ToolInputBase):
     impression: str = Field(
         ...,
         min_length=1,
@@ -131,7 +142,7 @@ class UpdateImpressionOutput(BaseModel):
     message: str
 
 
-class FetchPermanentSummariesInput(BaseModel):
+class FetchPermanentSummariesInput(ToolInputBase):
     start: int | None = Field(
         default=None,
         ge=1,
@@ -158,7 +169,7 @@ class FetchPermanentSummariesOutput(BaseModel):
     records: list[PermanentSummary]
 
 
-class CollaborativeReasoningInput(BaseModel):
+class CollaborativeReasoningInput(ToolInputBase):
     topic: str = Field(
         ...,
         min_length=1,
@@ -381,6 +392,7 @@ class ToolRegistry:
 __all__ = [
     "ToolRegistry",
     "ToolTemplate",
+    "ToolInputBase",
     "GoogleSearchInput",
     "GoogleSearchOutput",
     "FetchUrlInput",
@@ -395,3 +407,24 @@ __all__ = [
     "CollaborativeReasoningInput",
     "CollaborativeReasoningOutput",
 ]
+
+
+async def _maybe_notify_user(ctx: RunContext | None, payload: Any) -> None:
+    if ctx is None or payload is None:
+        return
+    notice = getattr(payload, "user_notice", None)
+    if not notice:
+        return
+    notice = notice.strip()
+    if not notice:
+        return
+    deps = getattr(ctx, "deps", None)
+    callback: Callable[[str], Awaitable[None]] | None = getattr(
+        deps, "tool_notification_cb", None
+    )
+    if callback is None:
+        return
+    try:
+        await callback(notice)
+    except Exception as exc:  # pragma: no cover - notification best effort
+        logger.warning("tool_notification_failed", error=str(exc))
