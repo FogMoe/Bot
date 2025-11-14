@@ -6,6 +6,7 @@ import inspect
 import re
 from dataclasses import dataclass
 from functools import wraps
+from pathlib import Path
 from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar, Callable
 
 from pydantic import BaseModel, Field
@@ -29,6 +30,9 @@ from app.agents.tool_logging import (
 )
 from app.logging import logger
 from app.utils.datetime import utc_now
+
+
+AGENT_DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "agent"
 
 
 class ToolHandler(Protocol):
@@ -248,6 +252,19 @@ class CollaborativeReasoningOutput(BaseModel):
     session_id: str = Field(..., description="Session identifier for continued collaboration")
 
 
+class AgentDocsInput(SilentToolInput):
+    document_name: str | None = Field(
+        default=None,
+        description="Exact Markdown filename to read (omit to only list available documents)",
+    )
+
+
+class AgentDocsOutput(BaseModel):
+    documents: list[str] = Field(default_factory=list)
+    selected_document: str | None = None
+    content: str | None = None
+
+
 T = TypeVar("T")
 
 _SNAPSHOT_QUERY_SPLIT_PATTERN = re.compile(r"[\s,]+")
@@ -276,6 +293,16 @@ def _market_service(ctx: RunContext) -> MarketDataService:
 
 def _insight_service(ctx: RunContext) -> UserInsightService:
     return UserInsightService(ctx.deps.session)
+
+
+def _list_agent_docs() -> list[str]:
+    if not AGENT_DOCS_DIR.exists() or not AGENT_DOCS_DIR.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in AGENT_DOCS_DIR.glob("*.md")
+        if path.is_file()
+    )
 
 
 async def _run_with_service_errors(awaitable: Awaitable[T]) -> T:
@@ -505,6 +532,25 @@ async def collaborative_reasoning_tool(
     )
 
 
+async def agent_docs_tool(ctx: RunContext, data: AgentDocsInput) -> AgentDocsOutput:
+    del ctx  # context is unused but maintained for consistent signature
+    documents = _list_agent_docs()
+    selected_document: str | None = None
+    content: str | None = None
+
+    if data.document_name:
+        selected_document = Path(data.document_name).name
+        target_path = AGENT_DOCS_DIR / selected_document
+        if target_path.is_file() and target_path.suffix.lower() == ".md":
+            content = target_path.read_text(encoding="utf-8")
+
+    return AgentDocsOutput(
+        documents=documents,
+        selected_document=selected_document,
+        content=content,
+    )
+
+
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
     ToolTemplate(
         handler=google_search_tool,
@@ -541,6 +587,11 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
         name="collaborative_reasoning",
         description="Invoke an internal collaborator agent for deeper multi-step reasoning with resumable internal dialogues",
     ),
+    ToolTemplate(
+        handler=agent_docs_tool,
+        name="agent_docs_lookup",
+        description="List or read internal documentation stored",
+    ),
 )
 
 
@@ -575,6 +626,9 @@ __all__ = [
     "PermanentSummary",
     "CollaborativeReasoningInput",
     "CollaborativeReasoningOutput",
+    "AgentDocsInput",
+    "AgentDocsOutput",
+    "agent_docs_tool",
 ]
 
 
