@@ -374,6 +374,32 @@ async def test_handle_issue_card_success(session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_handle_issue_card_defaults_duration(session, monkeypatch):
+    pro_plan = SubscriptionPlan(
+        code="PRO",
+        name="Pro",
+        description="",
+        hourly_message_limit=50,
+        monthly_price=10.0,
+        priority=10,
+        is_default=False,
+    )
+    admin_user = User(telegram_id=501, username="admin2", language_code="en")
+    session.add_all([pro_plan, admin_user])
+    await session.flush()
+
+    chat_router.settings.admin_telegram_id = admin_user.telegram_id
+    monkeypatch.setattr(chat_router, "_generate_card_code", lambda plan_code: f"{plan_code}-CARD2")
+
+    message = DummyMessage("/issuecard PRO", DummyFromUser(user_id=admin_user.telegram_id))
+    await handle_issue_card(message, session, db_user=admin_user)
+
+    card = (await session.execute(select(SubscriptionCard))).scalars().first()
+    assert card is not None
+    assert card.valid_days == chat_router.settings.subscriptions.subscription_duration_days
+
+
+@pytest.mark.asyncio
 async def test_handle_issue_card_unauthorized(session):
     chat_router.settings.admin_telegram_id = 999
     user = User(telegram_id=600, username="user", language_code="en")

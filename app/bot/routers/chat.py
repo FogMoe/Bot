@@ -175,12 +175,13 @@ async def handle_issue_card(
         return
 
     card_code = provided_code or _generate_card_code(plan.code)
+    effective_days = duration_days if duration_days is not None else settings.subscriptions.subscription_duration_days
 
     card = SubscriptionCard(
         code=card_code,
         plan_id=plan.id,
         status="new",
-        valid_days=duration_days,
+        valid_days=effective_days,
         created_by_admin_id=db_user.id if db_user else None,
     )
     session.add(card)
@@ -188,7 +189,7 @@ async def handle_issue_card(
 
     await answer_with_retry(
         message,
-        f"Card generated: {card_code}\nPlan: {plan.name}\nDuration: {duration_days or settings.subscriptions.subscription_duration_days} days",
+        f"Card generated: {card_code}\nPlan: {plan.name}\nDuration: {effective_days} days",
         parse_mode=None,
     )
 
