@@ -63,8 +63,8 @@ def _messages():
     from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
     return [
-        ModelRequest(parts=[UserPromptPart(content="hello")]),
-        ModelResponse(parts=[TextPart(content="world")]),
+        ModelRequest(parts=[UserPromptPart(content="hello " * 10)]),
+        ModelResponse(parts=[TextPart(content="world " * 10)]),
     ]
 
 

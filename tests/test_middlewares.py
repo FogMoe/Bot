@@ -214,4 +214,4 @@ async def test_handle_start_uses_subscription_plan(session, monkeypatch, stub_su
     await handle_start(message, session, db_user=user)
 
     assert message.answers
-    assert "Pro" in message.answers[0][0]
+    assert "Plan User" in message.answers[0][0]

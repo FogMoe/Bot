@@ -51,6 +51,8 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    BOT_SUMMARY__MODEL=
    BOT_COLLABORATOR__PROVIDER=        # 可选，单独为协作子 agent 指定 provider
    BOT_COLLABORATOR__MODEL=           # 可选，单独为协作子 agent 指定模型
+   BOT_VISION__PROVIDER=              # 可选，图片描述 agent 的 provider，默认沿用主模型
+   BOT_VISION__MODEL=                 # 可选，图片描述 agent 的模型名称，默认沿用主模型
    ```
 
    - 如果使用 Azure，请改填 `BOT_LLM__AZURE__*`（API_KEY / BASE_URL / API_VERSION）。

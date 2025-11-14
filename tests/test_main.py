@@ -54,10 +54,10 @@ class DummyDispatcher:
     def register_error(self, handler):
         self.registered_error_handlers.append(handler)
 
-    async def start_polling(self, bot, *, agent):
+    async def start_polling(self, bot, **kwargs):
         self.started = True
         self.bot = bot
-        self.agent = agent
+        self.start_kwargs = kwargs
 
 
 class DummyDatabase:
@@ -87,6 +87,7 @@ async def test_main_bootstrap(monkeypatch):
         environment="test",
         default_language="en",
         request_limit=SimpleNamespace(interval_seconds=1, max_requests=1, window_retention_hours=24),
+        vision=None,
         database=SimpleNamespace(
             dsn="sqlite://",
             echo=False,
@@ -120,6 +121,8 @@ async def test_main_bootstrap(monkeypatch):
     monkeypatch.setattr(main_module, "Database", lambda settings: dummy_database)
     monkeypatch.setattr(main_module, "ensure_subscription_plans", fake_ensure)
     monkeypatch.setattr(main_module, "AgentOrchestrator", DummyAgent)
+    dummy_media_service = object()
+    monkeypatch.setattr(main_module, "MediaCaptionService", lambda settings: dummy_media_service)
     monkeypatch.setattr(main_module, "DbSessionMiddleware", _capture("db"))
     monkeypatch.setattr(main_module, "ThrottleMiddleware", _capture("throttle"))
     monkeypatch.setattr(main_module, "UserContextMiddleware", lambda: "userctx")

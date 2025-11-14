@@ -23,6 +23,7 @@ from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
 from app.i18n import I18nService
 from app.services.conversations import ConversationService
 from app.services.exceptions import CardNotFound
+from app.services.media_caption import MediaCaptionError, MediaCaptionService
 from app.services.memory import MemoryService
 from app.services.subscriptions import SubscriptionService
 from app.logging import logger
@@ -241,6 +242,24 @@ async def handle_chat(
 ) -> None:
     if db_user is None:
         return
+    user_text = _compose_user_input_text(message)
+    await _process_user_prompt(
+        message,
+        session=session,
+        agent=agent,
+        db_user=db_user,
+        user_text=user_text,
+    )
+
+
+async def _process_user_prompt(
+    message: Message,
+    *,
+    session: AsyncSession,
+    agent: AgentOrchestrator,
+    db_user: User,
+    user_text: str,
+) -> None:
     conversation_service = ConversationService(session)
     memory_service = MemoryService(session)
     i18n = I18nService(default_locale=settings.default_language)
@@ -259,7 +278,6 @@ async def handle_chat(
     }
 
     conversation = await conversation_service.get_or_create_active_conversation(db_user)
-    user_text = _compose_user_input_text(message)
     history_record = await conversation_service.get_history_record(conversation)
     history = conversation_service.deserialize_history(history_record)
     prior_summary = await conversation_service.get_prior_summary(conversation)
@@ -316,6 +334,18 @@ def _compose_user_input_text(message: Message) -> str:
     if reply_context:
         return f"{reply_context}\n{base_text}" if base_text else reply_context
     return base_text
+
+
+def _compose_media_user_input_text(message: Message, *, kind: str, description: str) -> str:
+    sections: list[str] = [f"[{kind.upper()}]"]
+    if message.caption:
+        sections.append(f"Caption: {message.caption}")
+    sections.append(f"Vision: {description}")
+    payload = "\n".join(sections)
+    reply_context = _format_reply_context(getattr(message, "reply_to_message", None))
+    if reply_context:
+        return f"{reply_context}\n{payload}"
+    return payload
 
 
 def _format_reply_context(reply_message: Message | None) -> str:
@@ -413,8 +443,32 @@ def _generate_card_code(plan_code: str) -> str:
 
 
 @router.message(F.photo)
-async def handle_photo(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
-    await _handle_non_text(message, session, db_user, kind="photo")
+async def handle_photo(
+    message: Message,
+    session: AsyncSession,
+    agent: AgentOrchestrator,
+    media_caption_service: MediaCaptionService | None = None,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+    if media_caption_service is None:
+        await _handle_non_text(message, session, db_user, kind="photo")
+        return
+    try:
+        description = await media_caption_service.describe_photo(message)
+    except MediaCaptionError as exc:
+        logger.info("media_caption_failed", kind="photo", error=str(exc))
+        await _handle_non_text(message, session, db_user, kind="photo")
+        return
+    user_text = _compose_media_user_input_text(message, kind="photo", description=description)
+    await _process_user_prompt(
+        message,
+        session=session,
+        agent=agent,
+        db_user=db_user,
+        user_text=user_text,
+    )
 
 
 @router.message(F.document)
@@ -434,8 +488,32 @@ async def handle_audio(message: Message, session: AsyncSession, db_user: User | 
 
 
 @router.message(F.sticker)
-async def handle_sticker(message: Message, session: AsyncSession, db_user: User | None = None) -> None:
-    await _handle_non_text(message, session, db_user, kind="sticker")
+async def handle_sticker(
+    message: Message,
+    session: AsyncSession,
+    agent: AgentOrchestrator,
+    media_caption_service: MediaCaptionService | None = None,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+    if media_caption_service is None:
+        await _handle_non_text(message, session, db_user, kind="sticker")
+        return
+    try:
+        description = await media_caption_service.describe_sticker(message)
+    except MediaCaptionError as exc:
+        logger.info("media_caption_failed", kind="sticker", error=str(exc))
+        await _handle_non_text(message, session, db_user, kind="sticker")
+        return
+    user_text = _compose_media_user_input_text(message, kind="sticker", description=description)
+    await _process_user_prompt(
+        message,
+        session=session,
+        agent=agent,
+        db_user=db_user,
+        user_text=user_text,
+    )
 
 
 @router.message(F.animation)

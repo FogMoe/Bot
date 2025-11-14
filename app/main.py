@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.db.session import Database
 from app.logging import configure_logging, logger
 from app.services.error_monitor import ErrorMonitor
+from app.services.media_caption import MediaCaptionService
 from app.services.seeds import ensure_subscription_plans
 
 
@@ -58,9 +59,10 @@ async def main() -> None:
 
     # Create agent AFTER environment variables are set
     agent = AgentOrchestrator(settings=settings)
+    media_caption_service = MediaCaptionService(settings=settings)
 
     logger.info("bot_starting", environment=settings.environment)
-    await dp.start_polling(bot, agent=agent)
+    await dp.start_polling(bot, agent=agent, media_caption_service=media_caption_service)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.agents import runner as runner_module
+from app.config import LLMSettings
 
 
 class DummySummary:
@@ -34,6 +35,11 @@ async def test_agent_orchestrator_retries_on_failure(monkeypatch, session):
         "build",
         staticmethod(lambda settings: DummySummary()),
     )
+    monkeypatch.setattr(
+        runner_module.CollaboratorAgent,
+        "build",
+        staticmethod(lambda settings: None),
+    )
 
     async def _noop(delay):
         return None
@@ -41,9 +47,12 @@ async def test_agent_orchestrator_retries_on_failure(monkeypatch, session):
     monkeypatch.setattr("app.utils.retry.asyncio.sleep", _noop)
 
     settings = SimpleNamespace(
-        llm=SimpleNamespace(request_timeout_seconds=5),
+        llm=LLMSettings(provider="openai", model="gpt", request_timeout_seconds=5),
         agent_timeout_seconds=10,
         external_tools=SimpleNamespace(),
+        vision=None,
+        collaborator=SimpleNamespace(provider=None, model=None),
+        environment="test",
     )
     orchestrator = runner_module.AgentOrchestrator(settings=settings)
     result = await orchestrator.run(
