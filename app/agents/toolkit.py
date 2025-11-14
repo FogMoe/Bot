@@ -175,8 +175,14 @@ class CollaborativeReasoningInput(BaseModel):
 
 
 class CollaborativeReasoningOutput(BaseModel):
-    result: str = Field(..., description="Final response from the collaborator agent")
-    session_id: str = Field(..., description="Session identifier, which can be used for continued collaboration")
+    result: str = Field(..., description="Summary of the collaborator's current analysis")
+    task_completed: bool = Field(
+        ..., description="True when the collaborator believes the task is fully resolved"
+    )
+    next_step: str | None = Field(
+        default=None, description="If continuing, describe the focus of the next round; otherwise null"
+    )
+    session_id: str = Field(..., description="Session identifier for continued collaboration")
 
 
 T = TypeVar("T")
@@ -278,11 +284,19 @@ async def collaborative_reasoning_tool(
     reasoning_prompt = (
         "You are collaborating with me on the following problem.\n"
         f"{topic_description}\n\n"
+        "Continue the dialogue, add fresh insights, and optionally propose follow-up checks. "
+        "Keep references to prior discussion consistent with the thread history."
     )
     run_result = await collaborator.run(reasoning_prompt, message_history=conversation_history)
     threads[session_id] = list(run_result.all_messages())
 
-    return CollaborativeReasoningOutput(result=run_result.output, session_id=session_id)
+    turn_output = run_result.output
+    return CollaborativeReasoningOutput(
+        result=turn_output.result,
+        task_completed=turn_output.task_completed,
+        next_step=turn_output.next_step,
+        session_id=session_id,
+    )
 
 
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
