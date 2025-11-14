@@ -174,7 +174,7 @@ You are provided with the following user information:
 - username: {username}
 - first name: {first_name}
 - last name: {last_name}
-- subscription level: {subscription}
+- subscription level: {subscription} (Free, Plus, Pro, Max)
 """
             )
         if impression:
