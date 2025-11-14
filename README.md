@@ -3,7 +3,7 @@
 基于 **aiogram 3**、**pydantic-ai** 和 **MySQL 8** 构建的异步 Telegram 机器人脚手架。  
 主要功能：
 
-- 免费 / Pro / Max 三档配额（每小时 10 / 50 / 200 条），通过 MySQL 中的卡密激活；新用户落库时自动创建 FREE 订阅。
+- 免费 / Plus / Pro / Max 4档配额（每小时 10 / 25 / 50 / 200 条），通过 MySQL 中的卡密激活；新用户落库时自动创建 FREE 订阅。
 - 模块化的逻辑/应用层，包含仓储层、服务层和路由层。
 - 通过 `pydantic-ai` 实现智能体响应，支持可插拔工具和长期记忆钩子。
 - 工具层统一通过服务注入：内置 SerpApi Google 搜索、Jina Reader 抓取网页、Judge0 远程 Python 代码执行。
