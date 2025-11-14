@@ -8,15 +8,17 @@ from types import SimpleNamespace
 import pytest
 
 from sqlalchemy import select
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
 from app.bot.routers import chat as chat_router
 from app.bot.routers.chat import (
     handle_activate,
     handle_chat,
     handle_issue_card,
+    handle_new_conversation,
     handle_status,
 )
-from app.db.models.core import SubscriptionCard, SubscriptionPlan, User
+from app.db.models.core import Conversation, ConversationArchive, Message, SubscriptionCard, SubscriptionPlan, User
 from app.services.exceptions import CardNotFound
 
 
@@ -241,6 +243,99 @@ async def test_handle_chat_agent_error(session, monkeypatch):
         await handle_chat(message, session, ExplodingAgent(), db_user=user)
 
     assert message.answers and "Agent failed" in message.answers[0][0]
+
+
+@pytest.mark.asyncio
+async def test_handle_new_conversation_archives_and_starts_fresh(session):
+    user = User(telegram_id=200, username="newcmd", language_code="en")
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    session.add_all([user, plan])
+    await session.flush()
+
+    conversation_service = chat_router.ConversationService(session)
+    conversation = await conversation_service.get_or_create_active_conversation(user)
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="Hello there")]),
+        ModelResponse(parts=[TextPart(content="Hi!")]),
+    ]
+    await conversation_service.store_manual_history(conversation, user=user, messages=messages)
+
+    class FakeAgent:
+        async def summarize_history(self, history):
+            return "summary text"
+
+    message = DummyMessage("/new", DummyFromUser(user_id=user.telegram_id))
+    await handle_new_conversation(message, session, agent=FakeAgent(), db_user=user)
+
+    texts = [text for text, _ in message.answers]
+    assert any("Archived" in text for text in texts)
+
+    conversations = (await session.execute(select(Conversation))).scalars().all()
+    assert len(conversations) == 2
+    old = next(conv for conv in conversations if conv.id == conversation.id)
+    assert old.status == "archived"
+    active = next(conv for conv in conversations if conv.status == "active")
+    assert active.id != old.id
+
+    archive = (
+        await session.execute(
+            select(ConversationArchive).where(ConversationArchive.conversation_id == old.id)
+        )
+    ).scalar_one_or_none()
+    assert archive is not None
+    assert archive.summary_text == "summary text"
+
+    old_history = (
+        await session.execute(select(Message).where(Message.conversation_id == old.id))
+    ).scalar_one_or_none()
+    assert old_history is None
+
+    new_history = (
+        await session.execute(select(Message).where(Message.conversation_id == active.id))
+    ).scalar_one_or_none()
+    assert new_history is None
+
+
+@pytest.mark.asyncio
+async def test_handle_new_conversation_without_history(session):
+    user = User(telegram_id=201, username="newcmd-empty", language_code="en")
+    plan = SubscriptionPlan(
+        code="FREE",
+        name="Free",
+        description="",
+        hourly_message_limit=10,
+        monthly_price=0.0,
+        priority=0,
+        is_default=True,
+    )
+    session.add_all([user, plan])
+    await session.flush()
+
+    class FakeAgent:
+        async def summarize_history(self, history):
+            return "should not be called"
+
+    message = DummyMessage("/new", DummyFromUser(user_id=user.telegram_id))
+    await handle_new_conversation(message, session, agent=FakeAgent(), db_user=user)
+
+    texts = [text for text, _ in message.answers]
+    assert len(texts) == 1
+    assert "fresh conversation" in texts[0]
+
+    conversations = (await session.execute(select(Conversation))).scalars().all()
+    assert len(conversations) == 2
+    assert sum(1 for conv in conversations if conv.status == "active") == 1
+
+    archives = (await session.execute(select(ConversationArchive))).scalars().all()
+    assert len(archives) == 0
 
 
 @pytest.mark.asyncio

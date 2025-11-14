@@ -8,5 +8,7 @@
   "limit.exceeded": "Hourly quota reached. Upgrade with /activate to increase your limit.",
   "chat.agent_error": "Agent failed to respond. Please try again later.",
   "media.unsupported": "Received a {kind}, currently only text is supported. We've logged it for future processing.",
-  "group.not_supported": "Please talk to me in a private chat for full functionality."
+  "group.not_supported": "Please talk to me in a private chat for full functionality.",
+  "new.archived": "Cleared your previous conversation and started a new one.",
+  "new.no_history": "There was nothing to restart. You're already in a fresh conversation."
 }

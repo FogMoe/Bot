@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.run import AgentRunResult
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.core import Conversation, ConversationArchive, Message, User
@@ -41,7 +41,9 @@ class ConversationService:
         conversation = result.scalar_one_or_none()
         if conversation:
             return conversation
+        return await self.create_conversation(user)
 
+    async def create_conversation(self, user: User) -> Conversation:
         conversation = Conversation(
             user_id=user.id,
             title=f"Chat {utc_now().strftime('%Y-%m-%d %H:%M')}",
@@ -105,6 +107,34 @@ class ConversationService:
                 messages=messages,
                 token_count=current_tokens,
             )
+
+    async def archive_full_history(
+        self,
+        conversation: Conversation,
+        *,
+        user: User,
+        messages: Sequence[ModelMessage],
+        summary_text: str,
+    ) -> None:
+        token_count = self._estimate_tokens(messages)
+        await self._upsert_archive(
+            conversation,
+            user=user,
+            messages=messages,
+            summary_text=summary_text,
+            token_count=token_count,
+        )
+
+    async def mark_conversation_archived(self, conversation: Conversation) -> None:
+        conversation.status = "archived"
+        conversation.last_interaction_at = utc_now()
+        await self.session.flush()
+
+    async def delete_history(self, conversation: Conversation) -> None:
+        await self.session.execute(
+            delete(Message).where(Message.conversation_id == conversation.id)
+        )
+        await self.session.flush()
 
     async def store_manual_history(
         self,

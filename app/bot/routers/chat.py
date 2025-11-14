@@ -191,6 +191,46 @@ async def handle_issue_card(
     )
 
 
+@router.message(Command("new"))
+async def handle_new_conversation(
+    message: Message,
+    session: AsyncSession,
+    agent: AgentOrchestrator,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+
+    i18n = I18nService(default_locale=settings.default_language)
+    locale = db_user.language_code or settings.default_language
+    conversation_service = ConversationService(session)
+
+    conversation = await conversation_service.get_or_create_active_conversation(db_user)
+    history_record = await conversation_service.get_history_record(conversation)
+    history = conversation_service.deserialize_history(history_record)
+
+    summary_text: str | None = None
+    if history:
+        summary_text = await agent.summarize_history(history)
+        await conversation_service.archive_full_history(
+            conversation,
+            user=db_user,
+            messages=history,
+            summary_text=summary_text,
+        )
+
+    await conversation_service.mark_conversation_archived(conversation)
+    await conversation_service.delete_history(conversation)
+    await conversation_service.create_conversation(db_user)
+
+    if summary_text:
+        archived_text = i18n.gettext("new.archived", locale=locale)
+        await answer_with_retry(message, archived_text, parse_mode=None)
+    else:
+        no_history_text = i18n.gettext("new.no_history", locale=locale)
+        await answer_with_retry(message, no_history_text, parse_mode=None)
+
+
 @router.message(F.text)
 async def handle_chat(
     message: Message,
