@@ -281,6 +281,10 @@ async def fetch_permanent_summaries_tool(
 async def collaborative_reasoning_tool(
     ctx: RunContext, data: CollaborativeReasoningInput
 ) -> CollaborativeReasoningOutput:
+    from app.config import get_settings
+    settings = get_settings()
+    is_dev = settings.environment == "dev"
+    
     collaborator: CollaboratorAgent | None = getattr(ctx.deps, "collaborator_agent", None)
     if collaborator is None:
         raise RuntimeError("Collaborator agent is not configured")
@@ -294,8 +298,24 @@ async def collaborative_reasoning_tool(
         raise RuntimeError("Collaborator thread store is missing from dependencies")
     if data.reset_session:
         threads.pop(session_id, None)
+        if is_dev:
+            logger.info(
+                "collaborator_session_reset",
+                session_id=session_id,
+                topic=data.topic[:100]
+            )
 
     conversation_history: Sequence[ModelMessage] = threads.get(session_id, ())
+    
+    if is_dev:
+        logger.info(
+            "collaborator_reasoning_start",
+            session_id=session_id,
+            topic=data.topic,
+            max_rounds=data.max_rounds,
+            has_history=len(conversation_history) > 0,
+            history_length=len(conversation_history)
+        )
 
     primary_topic = data.topic.strip()
     focus = primary_topic
@@ -304,13 +324,24 @@ async def collaborative_reasoning_tool(
     max_rounds = data.max_rounds
 
     for _ in range(max_rounds):
+        round_num = _ + 1
+        
+        if is_dev:
+            logger.info(
+                "collaborator_round_start",
+                session_id=session_id,
+                round=round_num,
+                max_rounds=max_rounds,
+                focus=focus[:200]
+            )
+        
         reasoning_prompt = (
             "You are a reasoning collaborator working with me on a multi-step analysis.\n"
             "Your goal in this round is to make meaningful progress toward the overall objective.\n\n"
 
             f"Primary objective:\n{primary_topic}\n\n"
             f"Current focus of this round:\n{focus}\n\n"
-            f"Current round: {_ + 1} / {max_rounds}\n\n"
+            f"Current round: {round_num} / {max_rounds}\n\n"
 
             "Guidelines for this round:\n"
             "- Build directly on prior discussion (if provided in the history).\n"
@@ -327,14 +358,50 @@ async def collaborative_reasoning_tool(
         threads[session_id] = conversation_history
 
         last_output = run_result.output
+        
+        if is_dev:
+            logger.info(
+                "collaborator_round_complete",
+                session_id=session_id,
+                round=round_num,
+                result_preview=last_output.result[:300] if last_output.result else None,
+                task_completed=last_output.task_completed,
+                next_step=last_output.next_step[:100] if last_output.next_step else None,
+                history_messages=len(conversation_history)
+            )
+        
         if last_output.task_completed or not last_output.next_step:
+            if is_dev:
+                logger.info(
+                    "collaborator_reasoning_ended",
+                    session_id=session_id,
+                    reason="completed" if last_output.task_completed else "no_next_step",
+                    total_rounds=round_num
+                )
             break
         focus = last_output.next_step.strip()
         if not focus:
+            if is_dev:
+                logger.info(
+                    "collaborator_reasoning_ended",
+                    session_id=session_id,
+                    reason="empty_next_step",
+                    total_rounds=round_num
+                )
             break
 
     if last_output is None:
         raise RuntimeError("Collaborator agent produced no output")
+
+    if is_dev:
+        logger.info(
+            "collaborator_reasoning_final",
+            session_id=session_id,
+            result_length=len(last_output.result),
+            result_preview=last_output.result[:500],
+            task_completed=last_output.task_completed,
+            next_step=last_output.next_step
+        )
 
     return CollaborativeReasoningOutput(
         result=last_output.result,
