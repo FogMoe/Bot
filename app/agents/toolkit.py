@@ -294,12 +294,20 @@ async def collaborative_reasoning_tool(
 
     for _ in range(max_rounds):
         reasoning_prompt = (
-            "You are collaborating with me on the following problem.\n"
+            "You are a reasoning collaborator working with me on a multi-step analysis.\n"
+            "Your goal in this round is to make meaningful progress toward the overall objective.\n\n"
+
             f"Primary objective:\n{primary_topic}\n\n"
-            f"Current focus:\n{focus}\n\n"
-            f"Current round, Max rounds:\n{_ + 1}, {max_rounds}\n\n"
-            "Continue the dialogue, add fresh insights, and optionally propose follow-up checks. "
-            "Keep references to prior discussion consistent with the thread history."
+            f"Current focus of this round:\n{focus}\n\n"
+            f"Current round: {_ + 1} / {max_rounds}\n\n"
+
+            "Guidelines for this round:\n"
+            "- Build directly on prior discussion (if provided in the history).\n"
+            "- Avoid repeating previous analyses unless needed for context.\n"
+            "- Provide clear, concise, and insightful reasoning for this specific focus.\n"
+            "- Do not attempt to give the final conclusion unless it is truly justified.\n"
+            "- If further investigation is needed, propose a precise next_step.\n"
+            "- Maintain analytical tone; do not produce conversational dialogue.\n"
         )
         run_result = await collaborator.run(
             reasoning_prompt, message_history=conversation_history
