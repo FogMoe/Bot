@@ -25,6 +25,8 @@ db/schema.sql      # 与 SQLAlchemy 模型匹配的 MySQL DDL
 pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
 ```
 
+docs/agent 下的文件是给agent读的。
+
 ## 本地运行
 
 1. 创建并激活 Python 3.11+ 环境，然后安装依赖：
