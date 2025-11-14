@@ -120,6 +120,19 @@ async def handle_activate(
         )
         return
 
+    try:
+        await session.refresh(subscription)
+    except AttributeError:
+        pass
+    if subscription.expires_at is None:
+        logger.warning("subscription_expires_missing", subscription_id=subscription.id)
+        await answer_with_retry(
+            message,
+            i18n.gettext("activate.invalid", locale=locale),
+            parse_mode=None,
+        )
+        return
+
     plan = await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Pro"
     await answer_with_retry(
