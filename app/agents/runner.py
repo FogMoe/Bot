@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Literal, Sequence
 
 import httpx
 from pydantic_ai import Agent, RunContext
@@ -42,6 +42,7 @@ class AgentDependencies:
     impression: str | None = None
     collaborator_agent: CollaboratorAgent | None = None
     collaborator_threads: dict[str, list[ModelMessage]] = field(default_factory=dict)
+    environment: Literal["dev", "staging", "prod"] = "dev"
 
 
 def build_agent(
@@ -228,6 +229,7 @@ class AgentOrchestrator:
                 user_profile=user_profile,
                 impression=user_impression,
                 collaborator_agent=self.collaborator_agent,
+                environment=self.settings.environment,
             )
             try:
                 async with asyncio.timeout(self.settings.agent_timeout_seconds):

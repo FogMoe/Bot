@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar
 
 from pydantic import BaseModel, Field
@@ -16,6 +18,13 @@ from app.services.external_tools import (
     WebContentService,
 )
 from app.services.user_insights import UserInsightService, MAX_IMPRESSION_LENGTH
+from app.agents.tool_logging import (
+    extract_ctx,
+    extract_tool_arguments,
+    log_tool_event,
+    serialize_tool_payload,
+    should_log_tool_call,
+)
 
 
 class ToolHandler(Protocol):
@@ -32,8 +41,29 @@ class ToolTemplate:
     takes_ctx: bool = True
 
     def build(self) -> Tool:
+        original_handler = self.handler
+
+        @wraps(original_handler)
+        async def _logged_handler(*args: Any, **kwargs: Any) -> object:
+            ctx = extract_ctx(args, kwargs, self.takes_ctx)
+            should_log = should_log_tool_call(ctx)
+            if should_log:
+                log_tool_event(
+                    self.name,
+                    "request",
+                    serialize_tool_payload(
+                        extract_tool_arguments(args, kwargs, self.takes_ctx)
+                    ),
+                )
+            result = await original_handler(*args, **kwargs)
+            if should_log:
+                log_tool_event(self.name, "response", serialize_tool_payload(result))
+            return result
+
+        _logged_handler.__signature__ = inspect.signature(original_handler)
+
         return Tool(
-            self.handler,
+            _logged_handler,
             name=self.name,
             description=self.description,
             takes_ctx=self.takes_ctx,
