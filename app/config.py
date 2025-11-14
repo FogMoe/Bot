@@ -176,6 +176,25 @@ class ExternalToolSettings(BaseModel):
     judge0_api_key: SecretStr | None = None
     judge0_language_id: int = Field(default=71, ge=1)
     request_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    market_snapshot_url: AnyHttpUrl = Field(
+        default="https://9rin.com/index.php",
+        description="Base endpoint returning market snapshot data",
+    )
+    market_snapshot_action: str = Field(
+        default="get_snapshot_data",
+        min_length=1,
+        description="Action/query parameter passed to the snapshot endpoint",
+    )
+    market_snapshot_secret_key: SecretStr | None = Field(
+        default=None,
+        description="Secret key required by the snapshot provider",
+    )
+    market_snapshot_max_results: int = Field(
+        default=5,
+        ge=1,
+        le=5,
+        description="Upper bound for snapshot results returned per tool call",
+    )
 
 
 class ZaiSettings(BaseModel):

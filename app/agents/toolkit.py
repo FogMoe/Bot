@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Awaitable, Iterable, Protocol, Sequence, TypeVar, Callable
@@ -13,6 +14,7 @@ from pydantic_ai.messages import ModelMessage
 from app.agents.collaborator import CollaboratorAgent, CollaboratorTurnOutput
 from app.services.external_tools import (
     CodeExecutionService,
+    MarketDataService,
     SearchService,
     ToolServiceError,
     WebContentService,
@@ -26,6 +28,7 @@ from app.agents.tool_logging import (
     should_log_tool_call,
 )
 from app.logging import logger
+from app.utils.datetime import utc_now
 
 
 class ToolHandler(Protocol):
@@ -109,6 +112,45 @@ class FetchUrlOutput(BaseModel):
     status_code: int
     content_type: str | None
     content: str
+
+
+class InstrumentSnapshot(BaseModel):
+    symbol: str
+    name: str
+    current_price: str
+    price_change: str | None = None
+    percent_change: str | None = None
+    open_price: str | None = None
+    high_price: str | None = None
+    low_price: str | None = None
+    previous_close_price: str | None = None
+    data_provider_timestamp: int | None = None
+    collection_timestamp: int | None = None
+    matched_tokens: list[str] = Field(default_factory=list)
+
+
+class FetchMarketSnapshotInput(ToolInputBase):
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="One or more comma/space separated keywords or symbols",
+    )
+    max_results: int | None = Field(
+        default=5,
+        ge=1,
+        le=5,
+        description="Maximum number of snapshot entries to return",
+    )
+
+
+class FetchMarketSnapshotOutput(BaseModel):
+    as_of: str
+    total_matches: int
+    truncated: bool
+    unmatched_tokens: list[str]
+    items: list[InstrumentSnapshot] = Field(default_factory=list)
+    error_message: str | None = None
 
 
 class ExecutePythonCodeInput(ToolInputBase):
@@ -208,6 +250,13 @@ class CollaborativeReasoningOutput(BaseModel):
 
 T = TypeVar("T")
 
+_SNAPSHOT_QUERY_SPLIT_PATTERN = re.compile(r"[\s,]+")
+_MAX_SNAPSHOT_TOKENS = 5
+
+
+def _iso_utc_now() -> str:
+    return utc_now().isoformat().replace("+00:00", "Z")
+
 
 def _search_service(ctx: RunContext) -> SearchService:
     return SearchService(ctx.deps.http_client, ctx.deps.tool_settings)
@@ -219,6 +268,10 @@ def _web_service(ctx: RunContext) -> WebContentService:
 
 def _code_execution_service(ctx: RunContext) -> CodeExecutionService:
     return CodeExecutionService(ctx.deps.http_client, ctx.deps.tool_settings)
+
+
+def _market_service(ctx: RunContext) -> MarketDataService:
+    return MarketDataService(ctx.deps.http_client, ctx.deps.tool_settings)
 
 
 def _insight_service(ctx: RunContext) -> UserInsightService:
@@ -242,6 +295,43 @@ async def fetch_url_tool(ctx: RunContext, data: FetchUrlInput) -> FetchUrlOutput
     service = _web_service(ctx)
     payload = await _run_with_service_errors(service.fetch(data.url))
     return FetchUrlOutput(**payload)
+
+
+def _parse_snapshot_tokens(raw_query: str) -> list[str]:
+    tokens = [token.strip() for token in _SNAPSHOT_QUERY_SPLIT_PATTERN.split(raw_query) if token.strip()]
+    if len(tokens) > _MAX_SNAPSHOT_TOKENS:
+        tokens = tokens[:_MAX_SNAPSHOT_TOKENS]
+    return tokens
+
+
+async def fetch_market_snapshot_tool(
+    ctx: RunContext, data: FetchMarketSnapshotInput
+) -> FetchMarketSnapshotOutput:
+    tokens = _parse_snapshot_tokens(data.query)
+    if not tokens:
+        raise RuntimeError("Please provide at least one valid code or keyword")
+
+    service = _market_service(ctx)
+    try:
+        payload = await service.query_snapshots(tokens, data.max_results)
+    except ToolServiceError as exc:
+        return FetchMarketSnapshotOutput(
+            as_of=_iso_utc_now(),
+            total_matches=0,
+            truncated=False,
+            unmatched_tokens=tokens,
+            items=[],
+            error_message=str(exc),
+        )
+    items = [InstrumentSnapshot(**item) for item in payload.items]
+    return FetchMarketSnapshotOutput(
+        as_of=payload.as_of,
+        total_matches=payload.total_matches,
+        truncated=payload.truncated,
+        unmatched_tokens=payload.unmatched_tokens,
+        items=items,
+        error_message=None,
+    )
 
 
 async def execute_python_code_tool(
@@ -422,6 +512,11 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
         description="Use Google search engine to obtain the latest information and answers",
     ),
     ToolTemplate(
+        handler=fetch_market_snapshot_tool,
+        name="fetch_market_snapshot",
+        description="Retrieve up-to-date market quotes for stocks or crypto symbols",
+    ),
+    ToolTemplate(
         handler=fetch_url_tool,
         name="fetch_url",
         description="Fetch and render webpage content for up-to-date browsing",
@@ -468,6 +563,9 @@ __all__ = [
     "GoogleSearchOutput",
     "FetchUrlInput",
     "FetchUrlOutput",
+    "FetchMarketSnapshotInput",
+    "FetchMarketSnapshotOutput",
+    "InstrumentSnapshot",
     "ExecutePythonCodeInput",
     "ExecutePythonCodeOutput",
     "UpdateImpressionInput",

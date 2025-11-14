@@ -59,6 +59,9 @@ pyproject.toml     # 依赖项（aiogram、pydantic-ai、SQLAlchemy 等）
    - 使用智谱或 Gemini 时，设置 `BOT_LLM__ZHIPU__API_KEY` / `BOT_LLM__GEMINI__API_KEY` 以及对应 `BASE_URL`。
    - 总结模型只需指定 provider 与 model，会自动复用上面配置的凭据。
    - 协作子 agent 默认为主模型，可通过 `BOT_COLLABORATOR__*` 覆盖。
+   - 实时行情工具 `fetch_market_snapshot` 默认请求 https://9rin.com/index.php?action=get_snapshot_data。
+     - 设置 `BOT_EXTERNAL_TOOLS__MARKET_SNAPSHOT_SECRET_KEY` 以启用接口校验。
+     - 如需更换数据源，可通过 `BOT_EXTERNAL_TOOLS__MARKET_SNAPSHOT_URL` / `MARKET_SNAPSHOT_ACTION` 覆盖。
 
    如需单独配置总结模型，可设置 `BOT_SUMMARY__*`（provider/model/base_url/api_key），否则默认沿用主 LLM。
    如需启用工具调用的外部 API，请设置 `BOT_EXTERNAL_TOOLS__*` 相关变量（SerpApi、Jina Reader、Judge0）。默认值会保留占位，便于本地演示。

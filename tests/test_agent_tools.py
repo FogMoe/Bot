@@ -3,17 +3,51 @@ from __future__ import annotations
 import pytest
 from types import SimpleNamespace
 
+from pydantic import SecretStr
+
 from app.agents.toolkit import (
+    FetchMarketSnapshotInput,
     FetchPermanentSummariesInput,
+    fetch_market_snapshot_tool,
     fetch_permanent_summaries_tool,
     UpdateImpressionInput,
     update_impression_tool,
 )
 from app.db.models.core import Conversation, ConversationArchive, User
+from app.config import ExternalToolSettings
 
 
 def _ctx(session, user_id):
     return SimpleNamespace(deps=SimpleNamespace(session=session, user_id=user_id))
+
+
+def _tool_ctx(http_client, tool_settings):
+    return SimpleNamespace(
+        deps=SimpleNamespace(http_client=http_client, tool_settings=tool_settings)
+    )
+
+
+class _SnapshotClient:
+    def __init__(self, payload):
+        self.payload = payload
+
+    async def get(self, url, params=None, timeout=None):
+
+        class _Response:
+            status_code = 200
+            text = "{}"
+            headers = {}
+
+            def __init__(self, payload):
+                self._payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        return _Response(self.payload)
 
 
 @pytest.mark.asyncio
@@ -63,3 +97,51 @@ async def test_fetch_permanent_summaries_tool(session):
     assert result.total == 1
     assert result.records
     assert result.records[0].summary == "Stored summary"
+
+
+@pytest.mark.asyncio
+async def test_fetch_market_snapshot_tool():
+    payload = {
+        "gb_nvda": {
+            "symbol": "gb_nvda",
+            "name": "NVIDIA",
+            "current_price": "1",
+            "collection_timestamp": 100,
+        },
+        "btc_btcbtcusd": {
+            "symbol": "btc_btcbtcusd",
+            "name": "Bitcoin",
+            "current_price": "2",
+            "collection_timestamp": 200,
+        },
+    }
+
+    ctx = _tool_ctx(
+        _SnapshotClient(payload),
+        ExternalToolSettings(market_snapshot_secret_key=SecretStr("secret")),
+    )
+
+    data = FetchMarketSnapshotInput(query="nvda missing btc", user_notice="查行情")
+    result = await fetch_market_snapshot_tool(ctx, data)
+
+    assert result.items
+    # should only return up to 5 items but dataset has 2
+    assert len(result.items) == 2
+    assert {item.symbol for item in result.items} == {"gb_nvda", "btc_btcbtcusd"}
+    assert "missing" in result.unmatched_tokens
+    assert result.error_message is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_market_snapshot_tool_handles_error():
+    ctx = _tool_ctx(
+        _SnapshotClient({}),
+        ExternalToolSettings(),
+    )
+
+    data = FetchMarketSnapshotInput(query="nvda", user_notice="查行情")
+    result = await fetch_market_snapshot_tool(ctx, data)
+
+    assert not result.items
+    assert result.error_message
+    assert "secret key" in result.error_message.lower()

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Sequence, TypeVar
 from urllib.parse import quote
 
@@ -18,6 +20,15 @@ class ToolServiceError(RuntimeError):
 
 
 T = TypeVar("T")
+
+
+@dataclass(slots=True)
+class MarketSnapshotResult:
+    as_of: str
+    items: list[dict[str, Any]]
+    total_matches: int
+    truncated: bool
+    unmatched_tokens: list[str]
 
 
 class _BaseToolService:
@@ -233,9 +244,200 @@ def _decode_field(value: Any) -> str:
         return str(value)
 
 
+class MarketDataService(_BaseToolService):
+    """Fetch and filter real-time market snapshot data."""
+
+    SYMBOL_EXACT_SCORE = 3
+    SYMBOL_PARTIAL_SCORE = 2
+    NAME_PARTIAL_SCORE = 1
+
+    def __init__(
+        self,
+        http_client: httpx.AsyncClient,
+        settings: ExternalToolSettings | None = None,
+    ) -> None:
+        super().__init__(http_client, settings=settings)
+        limit = self._settings.market_snapshot_max_results
+        self._default_limit = max(1, min(limit, 5))
+
+    async def query_snapshots(
+        self, tokens: Sequence[str], limit: int | None = None
+    ) -> MarketSnapshotResult:
+        normalized_tokens = [token.strip() for token in tokens if token and token.strip()]
+        if not normalized_tokens:
+            raise ToolServiceError("Please specify at least one search keyword.")
+
+        payload = await self._fetch_snapshot_payload()
+        if not isinstance(payload, dict) or not payload:
+            raise ToolServiceError("Market data provider returned no data.")
+
+        records = [self._normalize_record(symbol, info) for symbol, info in payload.items()]
+        matches, matched_token_set = self._filter_records(records, normalized_tokens)
+        unmatched = [token for token in normalized_tokens if token not in matched_token_set]
+
+        limit_value = self._normalize_limit(limit)
+        total_matches = len(matches)
+        truncated = total_matches > limit_value
+        limited_items = matches[:limit_value]
+
+        as_of_iso = self._compute_as_of(records)
+
+        return MarketSnapshotResult(
+            as_of=as_of_iso,
+            items=limited_items,
+            total_matches=total_matches,
+            truncated=truncated,
+            unmatched_tokens=unmatched,
+        )
+
+    async def _fetch_snapshot_payload(self) -> dict[str, Any]:
+        base_url = str(self._settings.market_snapshot_url).rstrip("/")
+        secret_key = self._read_secret(self._settings.market_snapshot_secret_key)
+        if not secret_key:
+            raise ToolServiceError("Market snapshot secret key is not configured.")
+
+        params = {
+            "action": self._settings.market_snapshot_action,
+            "secretkey": secret_key,
+        }
+
+        async def _request():
+            response = await self._client.get(
+                base_url,
+                params=params,
+                timeout=self._settings.request_timeout_seconds,
+            )
+            response.raise_for_status()
+            return response
+
+        try:
+            response = await self._retry_http("market_snapshot_fetch", _request)
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            status_code = exc.response.status_code if exc.response is not None else "unknown"
+            raise ToolServiceError(
+                f"Market snapshot fetch failed ({status_code}): {detail}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise ToolServiceError(f"Failed to contact market snapshot provider: {exc}") from exc
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ToolServiceError("Market snapshot response is not valid JSON.") from exc
+        if not isinstance(data, dict):
+            raise ToolServiceError("Market snapshot response format is invalid.")
+        return data
+
+    def _filter_records(
+        self, records: Sequence[dict[str, Any]], tokens: Sequence[str]
+    ) -> tuple[list[dict[str, Any]], set[str]]:
+        matches: list[dict[str, Any]] = []
+        matched_tokens: set[str] = set()
+        if not records:
+            return matches, matched_tokens
+
+        prepared_tokens = [(token, token.lower()) for token in tokens]
+
+        decorated: list[tuple[int, int, int, dict[str, Any]]] = []
+        for record in records:
+            symbol = (record.get("symbol") or "").lower()
+            name = (record.get("name") or "").lower()
+            best_score = 0
+            earliest_idx = len(prepared_tokens)
+            matched_for_record: list[str] = []
+            for idx, (original, lowered) in enumerate(prepared_tokens):
+                score = self._match_score(symbol, name, lowered)
+                if score:
+                    best_score = max(best_score, score)
+                    earliest_idx = min(earliest_idx, idx)
+                    matched_for_record.append(original)
+                    matched_tokens.add(original)
+            if matched_for_record:
+                record_with_tokens = dict(record)
+                record_with_tokens["matched_tokens"] = matched_for_record
+                decorated.append(
+                    (
+                        -best_score,
+                        earliest_idx,
+                        -int(record_with_tokens.get("collection_timestamp") or 0),
+                        record_with_tokens,
+                    )
+                )
+
+        decorated.sort(key=lambda item: (item[0], item[1], item[2], item[3].get("symbol", "")))
+        matches = [item[3] for item in decorated]
+        return matches, matched_tokens
+
+    def _match_score(self, symbol: str, name: str, token: str) -> int:
+        if not token:
+            return 0
+        if symbol == token:
+            return self.SYMBOL_EXACT_SCORE
+        if token in symbol:
+            return self.SYMBOL_PARTIAL_SCORE
+        if token in name:
+            return self.NAME_PARTIAL_SCORE
+        return 0
+
+    def _normalize_record(self, symbol: str, payload: dict[str, Any]) -> dict[str, Any]:
+        result = dict(payload or {})
+        result["symbol"] = str(result.get("symbol") or symbol)
+        result["name"] = str(result.get("name") or symbol)
+        numeric_fields = (
+            "current_price",
+            "price_change",
+            "percent_change",
+            "open_price",
+            "high_price",
+            "low_price",
+            "previous_close_price",
+        )
+        for field in numeric_fields:
+            value = result.get(field)
+            if value not in (None, ""):
+                result[field] = str(value)
+        result["collection_timestamp"] = self._to_int(
+            result.get("collection_timestamp") or payload.get("collection_timestamp")
+        )
+        result["data_provider_timestamp"] = self._to_int(
+            result.get("data_provider_timestamp") or payload.get("data_provider_timestamp")
+        )
+        return result
+
+    @staticmethod
+    def _to_int(value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _compute_as_of(self, records: Sequence[dict[str, Any]]) -> str:
+        timestamps: list[int] = []
+        for record in records:
+            raw_ts = record.get("collection_timestamp")
+            if isinstance(raw_ts, int):
+                timestamps.append(raw_ts)
+            else:
+                try:
+                    timestamps.append(int(raw_ts))
+                except (TypeError, ValueError):
+                    continue
+        if timestamps:
+            latest = max(timestamps)
+            return datetime.fromtimestamp(latest, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        return datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _normalize_limit(self, requested: int | None) -> int:
+        if not requested:
+            return self._default_limit
+        return max(1, min(requested, self._default_limit))
+
+
 __all__ = [
     "SearchService",
     "WebContentService",
     "CodeExecutionService",
+    "MarketDataService",
     "ToolServiceError",
 ]
