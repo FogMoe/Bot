@@ -23,6 +23,15 @@ class RateLimiter:
             timedelta(hours=retention_hours) if retention_hours and retention_hours > 0 else None
         )
 
+    async def get_current_usage(self, user: User) -> UsageHourlyQuota | None:
+        window_start = _current_window_start(utc_now())
+        stmt = select(UsageHourlyQuota).where(
+            UsageHourlyQuota.user_id == user.id,
+            UsageHourlyQuota.window_start == window_start,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def increment(
         self,
         user: User,

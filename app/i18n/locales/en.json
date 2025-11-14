@@ -5,6 +5,7 @@
   "activate.success": "Activated plan {plan} until {date}.",
   "status.summary": "Plan: {plan}\nStatus: {status}\nExpires at: {expires_at}\nUse /activate <card_code> to upgrade.",
   "status.no_expiration": "No expiration",
+  "status.hourly_usage": "Hourly usage: {used}/{limit} messages this hour.",
   "help.summary": "/start - Greet the bot\n/activate <card_code> - Activate a plan\n/status - Check your plan status\n/new - Start a new conversation",
   "limit.exceeded": "Hourly quota reached. Upgrade with /activate to increase your limit.",
   "chat.agent_error": "Agent failed to respond. Please try again later.",

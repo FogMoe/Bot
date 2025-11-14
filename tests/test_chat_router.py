@@ -130,6 +130,7 @@ async def test_handle_status_shows_subscription(session):
     text, _ = message.answers[0]
     assert "Plan: Free" in text
     assert "Status: Active" in text
+    assert "Hourly usage: 0/10" in text
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,7 @@ from app.services.exceptions import CardNotFound
 from app.services.media_caption import MediaCaptionError, MediaCaptionService
 from app.services.memory import MemoryService
 from app.services.subscriptions import SubscriptionService
+from app.services.rate_limit import RateLimiter
 from app.logging import logger
 
 router = Router()
@@ -70,6 +71,13 @@ async def handle_status(
     subscription = await subscription_service.get_active_subscription(db_user)
     if subscription is None:
         subscription = await subscription_service.ensure_default_subscription(db_user)
+    hourly_limit = await subscription_service.get_hourly_limit(db_user)
+    limiter = RateLimiter(
+        session,
+        retention_hours=settings.request_limit.window_retention_hours,
+    )
+    quota = await limiter.get_current_usage(db_user)
+    hourly_used = quota.message_count if quota else 0
     plan = subscription.plan or await session.get(SubscriptionPlan, subscription.plan_id)
     plan_name = plan.name if plan else "Unknown"
     expires_at = subscription.expires_at
@@ -90,7 +98,13 @@ async def handle_status(
         status=status_text,
         expires_at=expires_display,
     )
-    await answer_with_retry(message, summary, parse_mode=None)
+    usage = i18n.gettext(
+        "status.hourly_usage",
+        locale=locale,
+        used=hourly_used,
+        limit=hourly_limit,
+    )
+    await answer_with_retry(message, f"{summary}\n{usage}", parse_mode=None)
 
 
 @router.message(Command("help"))
