@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, Sequence
 
 from aiogram import BaseMiddleware
 from aiogram.enums import MessageEntityType
-from aiogram.types import Message, MessageEntity, TelegramObject
+from aiogram.types import Message, MessageEntity, MessageReactionUpdated, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BotSettings, get_settings
@@ -27,7 +27,13 @@ class RateLimitMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        if not isinstance(event, Message) or event.from_user is None:
+        is_message = isinstance(event, Message)
+        is_reaction = isinstance(event, MessageReactionUpdated)
+        if not (is_message or is_reaction):
+            return await handler(event, data)
+        if is_message and event.from_user is None:
+            return await handler(event, data)
+        if is_reaction and getattr(event, "user", None) is None:
             return await handler(event, data)
 
         session: AsyncSession = data["session"]
@@ -48,17 +54,16 @@ class RateLimitMiddleware(BaseMiddleware):
             except RateLimitExceeded:
                 i18n = I18nService(default_locale=self.settings.default_language)
                 locale = user.language_code or self.settings.default_language
-                await event.answer(
-                    i18n.gettext("limit.exceeded", locale=locale),
-                    parse_mode=None,
-                )
+                await self._notify_limit(event, i18n.gettext("limit.exceeded", locale=locale))
                 return None
 
         return await handler(event, data)
 
     @staticmethod
-    def _should_consume_quota(message: Message) -> bool:
+    def _should_consume_quota(message: Message | MessageReactionUpdated) -> bool:
         """Ignore bare commands so only real chats count toward quota."""
+        if isinstance(message, MessageReactionUpdated):
+            return bool(message.new_reaction)
         has_text = message.text or message.caption
         if has_text:
             return not RateLimitMiddleware._starts_with_command(
@@ -72,3 +77,15 @@ class RateLimitMiddleware(BaseMiddleware):
             if entity.type == MessageEntityType.BOT_COMMAND and entity.offset == 0:
                 return True
         return False
+
+    @staticmethod
+    async def _notify_limit(event: TelegramObject, text: str) -> None:
+        if isinstance(event, Message):
+            await event.answer(text, parse_mode=None)
+        elif isinstance(event, MessageReactionUpdated):
+            await event.bot.send_message(
+                event.chat.id,
+                text,
+                reply_to_message_id=event.message_id,
+                parse_mode=None,
+            )

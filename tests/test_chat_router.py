@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from aiogram.types import ReactionTypeEmoji, ReactionTypeCustomEmoji
 
 from sqlalchemy import select
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
@@ -128,6 +129,12 @@ async def test_handle_status_shows_subscription(session):
     text, _ = message.answers[0]
     assert "Plan: Free" in text
     assert "Status: Active" in text
+
+
+def test_compose_reaction_text_handles_multiple():
+    reactions = [ReactionTypeEmoji(emoji="👍"), ReactionTypeCustomEmoji(custom_emoji_id="abc123")]
+    result = chat_router._compose_reaction_text(reactions)
+    assert result == "👍:custom:abc123:"
 
 
 @pytest.mark.asyncio

@@ -7,10 +7,11 @@ import contextlib
 import secrets
 from datetime import timezone
 from time import perf_counter
+from typing import Any, Sequence
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import Message, MessageReactionUpdated, ReactionTypeEmoji, ReactionTypeCustomEmoji
 from aiogram.enums import ChatAction
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.usage import RunUsage
@@ -311,6 +312,30 @@ async def handle_chat(
     )
 
 
+@router.message_reaction()
+async def handle_reaction(
+    reaction: MessageReactionUpdated,
+    session: AsyncSession,
+    agent: AgentOrchestrator,
+    db_user: User | None = None,
+) -> None:
+    if db_user is None:
+        return
+    if not reaction.new_reaction:
+        return
+    reaction_text = _compose_reaction_text(reaction.new_reaction)
+    if not reaction_text:
+        return
+    proxy_message = _ReactionMessageAdapter(reaction)
+    await _process_user_prompt(
+        proxy_message,
+        session=session,
+        agent=agent,
+        db_user=db_user,
+        user_text=reaction_text,
+    )
+
+
 async def _process_user_prompt(
     message: Message,
     *,
@@ -400,6 +425,18 @@ async def _process_user_prompt(
         )
     except Exception:
         logger.warning("agent_run_record_failed", exc_info=True)
+
+
+def _compose_reaction_text(
+    reactions: Sequence[ReactionTypeEmoji | ReactionTypeCustomEmoji],
+) -> str:
+    parts: list[str] = []
+    for reaction in reactions:
+        if isinstance(reaction, ReactionTypeEmoji):
+            parts.append(reaction.emoji)
+        elif isinstance(reaction, ReactionTypeCustomEmoji):
+            parts.append(f":custom:{reaction.custom_emoji_id}:")
+    return "".join(parts).strip()
 
 
 def _compose_user_input_text(message: Message) -> str:
@@ -538,6 +575,21 @@ def _generate_card_code(plan_code: str) -> str:
     part1 = secrets.token_hex(4).upper()
     part2 = secrets.token_hex(8).upper()
     return f"{plan_code.upper()}-{part1}-{part2}-FOGMOE"
+
+
+class _ReactionMessageAdapter:
+    """Minimal message-like wrapper for reaction updates."""
+
+    def __init__(self, reaction: MessageReactionUpdated) -> None:
+        self.bot = reaction.bot
+        self.chat = reaction.chat
+        self.message_id = reaction.message_id
+        self.from_user = getattr(reaction, "user", None)
+        self._reply_to_message_id = reaction.message_id
+
+    async def answer(self, text: str, **kwargs: Any) -> Any:
+        kwargs.setdefault("reply_to_message_id", self._reply_to_message_id)
+        return await self.bot.send_message(self.chat.id, text, **kwargs)
 
 
 @router.message(F.photo)

@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from typing import Any, Awaitable, Callable, Deque, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import Message, TelegramObject
+from aiogram.types import Message, MessageReactionUpdated, TelegramObject
 
 from app.config import BotSettings, get_settings
 
@@ -25,13 +25,13 @@ class ThrottleMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        if not isinstance(event, Message) or event.from_user is None:
+        user_id = self._extract_user_id(event)
+        if user_id is None:
             return await handler(event, data)
 
         if self.max_requests <= 0:
             return await handler(event, data)
 
-        user_id = event.from_user.id
         now = time.monotonic()
         bucket = self._events[user_id]
 
@@ -39,11 +39,32 @@ class ThrottleMiddleware(BaseMiddleware):
             bucket.popleft()
 
         if len(bucket) >= self.max_requests:
-            await event.answer("Too many requests, please slow down.", parse_mode=None)
+            await self._notify_limit(event)
             return None
 
         bucket.append(now)
         return await handler(event, data)
+
+    @staticmethod
+    def _extract_user_id(event: TelegramObject) -> int | None:
+        if isinstance(event, Message) and event.from_user is not None:
+            return event.from_user.id
+        if isinstance(event, MessageReactionUpdated) and getattr(event, "user", None) is not None:
+            return event.user.id
+        return None
+
+    @staticmethod
+    async def _notify_limit(event: TelegramObject) -> None:
+        text = "Too many requests, please slow down."
+        if isinstance(event, Message):
+            await event.answer(text, parse_mode=None)
+        elif isinstance(event, MessageReactionUpdated):
+            await event.bot.send_message(
+                event.chat.id,
+                text,
+                reply_to_message_id=event.message_id,
+                parse_mode=None,
+            )
 
 
 __all__ = ["ThrottleMiddleware"]

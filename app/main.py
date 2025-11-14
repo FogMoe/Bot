@@ -53,9 +53,17 @@ async def main() -> None:
     async with database.session() as seed_session:
         await ensure_subscription_plans(seed_session, settings)
     dp.update.outer_middleware(DbSessionMiddleware(database))
-    dp.message.middleware(ThrottleMiddleware(settings))
-    dp.message.middleware(UserContextMiddleware())
-    dp.message.middleware(RateLimitMiddleware(settings))
+    throttle_middleware = ThrottleMiddleware(settings)
+    user_context_middleware = UserContextMiddleware()
+    rate_limit_middleware = RateLimitMiddleware(settings)
+
+    dp.message.middleware(throttle_middleware)
+    dp.message.middleware(user_context_middleware)
+    dp.message.middleware(rate_limit_middleware)
+
+    dp.message_reaction.middleware(throttle_middleware)
+    dp.message_reaction.middleware(user_context_middleware)
+    dp.message_reaction.middleware(rate_limit_middleware)
 
     # Create agent AFTER environment variables are set
     agent = AgentOrchestrator(settings=settings)

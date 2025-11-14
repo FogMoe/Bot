@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
+from aiogram.types import Message, MessageReactionUpdated, TelegramObject
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,18 +27,14 @@ class UserContextMiddleware(BaseMiddleware):
         session: AsyncSession = data["session"]
         settings = get_settings()
         i18n = I18nService(default_locale=settings.default_language)
-        from_user = getattr(event, "from_user", None)
+        from_user = self._extract_user(event)
         if from_user is None:
             return await handler(event, data)
 
         chat = getattr(event, "chat", None)
         if chat and chat.type != "private":
             locale = getattr(from_user, "language_code", None) or settings.default_language
-            await answer_with_retry(
-                getattr(event, "reply_to_message", event),
-                i18n.gettext("group.not_supported", locale=locale),
-                parse_mode=None,
-            )
+            await self._send_not_supported(event, i18n.gettext("group.not_supported", locale=locale))
             return
 
         subscription_service = SubscriptionService(session)
@@ -64,3 +60,27 @@ class UserContextMiddleware(BaseMiddleware):
         user.last_seen_at = utc_now()
         data["db_user"] = user
         return await handler(event, data)
+
+    @staticmethod
+    def _extract_user(event: TelegramObject):
+        if isinstance(event, Message):
+            return getattr(event, "from_user", None)
+        if isinstance(event, MessageReactionUpdated):
+            return getattr(event, "user", None)
+        return getattr(event, "from_user", None)
+
+    @staticmethod
+    async def _send_not_supported(event: TelegramObject, text: str) -> None:
+        if isinstance(event, Message):
+            await answer_with_retry(
+                getattr(event, "reply_to_message", event),
+                text,
+                parse_mode=None,
+            )
+        elif isinstance(event, MessageReactionUpdated):
+            await event.bot.send_message(
+                event.chat.id,
+                text,
+                reply_to_message_id=event.message_id,
+                parse_mode=None,
+            )
