@@ -172,9 +172,12 @@ class CollaborativeReasoningInput(BaseModel):
         default=False,
         description="If True, will forcefully clear the history of the specified session_id and start over",
     )
-
-
-COLLABORATION_MAX_AUTO_ROUNDS = 5
+    max_rounds: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Maximum number of internal collaborator iterations for this call",
+    )
 
 
 class CollaborativeReasoningOutput(BaseModel):
@@ -287,11 +290,14 @@ async def collaborative_reasoning_tool(
     focus = primary_topic
     last_output: CollaboratorTurnOutput | None = None
 
-    for _ in range(COLLABORATION_MAX_AUTO_ROUNDS):
+    max_rounds = data.max_rounds
+
+    for _ in range(max_rounds):
         reasoning_prompt = (
             "You are collaborating with me on the following problem.\n"
             f"Primary objective:\n{primary_topic}\n\n"
             f"Current focus:\n{focus}\n\n"
+            f"Current round, Max rounds:\n{_ + 1}, {max_rounds}\n\n"
             "Continue the dialogue, add fresh insights, and optionally propose follow-up checks. "
             "Keep references to prior discussion consistent with the thread history."
         )
