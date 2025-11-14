@@ -6,6 +6,7 @@ from typing import Sequence
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import BinaryImage, UserContent
+from pydantic_ai.settings import ModelSettings
 
 from app.agents.model_factory import build_model_spec
 from app.config import BotSettings, get_settings
@@ -28,6 +29,7 @@ class MediaCaptionAgent:
                 "Always respond in English, prefer concise paragraphs, "
                 "include visible text, and never exceed 1000 characters."
             ),
+            model_settings=ModelSettings(max_tokens=500),
         )
 
     async def describe(self, *, prompt_context: str, image: BinaryImage) -> str:
