@@ -1,5 +1,5 @@
 {
-  "start.greeting": "Hello, {name}! How can I help you today?",
+  "start.greeting": "Hello, {name}! How can I assist you today?",
   "activate.usage": "Usage: /activate <card_code>",
   "activate.invalid": "Invalid or expired card code.",
   "activate.success": "Activated plan {plan} until {date}.",
