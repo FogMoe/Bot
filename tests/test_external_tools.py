@@ -95,7 +95,7 @@ async def test_market_data_service_filters_and_limits():
             "collection_timestamp": 200,
         },
     }
-    settings = ExternalToolSettings(market_snapshot_secret_key=SecretStr("secret"))
+    settings = ExternalToolSettings()
     client = DummySnapshotClient(payload)
     service = MarketDataService(client, settings=settings)
 

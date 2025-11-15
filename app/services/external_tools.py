@@ -292,13 +292,9 @@ class MarketDataService(_BaseToolService):
 
     async def _fetch_snapshot_payload(self) -> dict[str, Any]:
         base_url = str(self._settings.market_snapshot_url).rstrip("/")
-        secret_key = self._read_secret(self._settings.market_snapshot_secret_key)
-        if not secret_key:
-            raise ToolServiceError("Market snapshot secret key is not configured.")
 
         params = {
             "action": self._settings.market_snapshot_action,
-            "secretkey": secret_key,
         }
 
         async def _request():

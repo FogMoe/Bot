@@ -118,7 +118,7 @@ async def test_fetch_market_snapshot_tool():
 
     ctx = _tool_ctx(
         _SnapshotClient(payload),
-        ExternalToolSettings(market_snapshot_secret_key=SecretStr("secret")),
+        ExternalToolSettings(),
     )
 
     data = FetchMarketSnapshotInput(query="nvda missing btc", user_notice="查行情")
@@ -144,4 +144,4 @@ async def test_fetch_market_snapshot_tool_handles_error():
 
     assert not result.items
     assert result.error_message
-    assert "secret key" in result.error_message.lower()
+    assert "no data" in result.error_message.lower()
