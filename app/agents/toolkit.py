@@ -279,9 +279,9 @@ class ToolDelegationInput(BaseModel):
         description="A natural-language instruction describing only the raw data to retrieve",
     )
     max_tool_calls: int = Field(
-        default=3,
-        ge=1,
-        le=5,
+        default=5,
+        ge=2,
+        le=10,
         description="Maximum number of tool calls for this data-retrieval operation",
     )
 
