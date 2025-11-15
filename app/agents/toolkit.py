@@ -88,6 +88,13 @@ class ToolTemplate:
 class ToolInputBase(BaseModel):
     """Base class for tool inputs."""
 
+    user_notice: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+        description="Short message shown to the user while data is being fetched",
+    )
+
 
 class SilentToolInput(BaseModel):
     """Tools inheriting from this base won't trigger user notifications."""
@@ -266,13 +273,7 @@ class AgentDocsOutput(BaseModel):
     content: str | None = None
 
 
-class ToolDelegationInput(BaseModel):
-    user_notice: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=50,
-        description="Short message shown to the user while data is being fetched",
-    )
+class ToolDelegationInput(ToolInputBase):
     command: str = Field(
         ...,
         min_length=1,
