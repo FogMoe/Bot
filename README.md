@@ -55,6 +55,8 @@ docs/agent 下的文件是给agent读的。
    BOT_COLLABORATOR__MODEL=           # 可选，单独为协作子 agent 指定模型
    BOT_VISION__PROVIDER=              # 可选，图片描述 agent 的 provider，默认沿用主模型
    BOT_VISION__MODEL=                 # 可选，图片描述 agent 的模型名称，默认沿用主模型
+   BOT_TOOL_AGENT__PROVIDER=openai
+   BOT_TOOL_AGENT__MODEL=gpt-4o-mini
    ```
 
    - 如果使用 Azure，请改填 `BOT_LLM__AZURE__*`（API_KEY / BASE_URL / API_VERSION）。
