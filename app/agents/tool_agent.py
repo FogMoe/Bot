@@ -47,10 +47,11 @@ class ToolAgentDependencies:
     tool_call_count: int = 0
 
 
-_TOOL_AGENT_INSTRUCTIONS = """
+_TOOL_AGENT_INSTRUCTIONS = """\
+# Role
 You are a ToolAgent.
 
-Rules:
+# Rules
 1. You may only interact with tools and must never produce natural-language dialogue.
 2. The provided command is plain text with no structured parameters. Parse it and determine the best available tool.
 3. Construct tool parameters yourself. Never ask for clarification or emit explanations.
