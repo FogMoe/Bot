@@ -267,11 +267,11 @@ class AgentDocsOutput(BaseModel):
 
 
 class ToolDelegationInput(BaseModel):
-    user_notice: str = Field(
-        ...,
+    user_notice: str | None = Field(
+        default=None,
         min_length=1,
         max_length=50,
-        description="Short message shown to the user to inform while data is being fetched",
+        description="Short message shown to the user while data is being fetched",
     )
     command: str = Field(
         ...,

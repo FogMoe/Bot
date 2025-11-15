@@ -93,7 +93,6 @@ class ToolAgent:
             instructions=_TOOL_AGENT_INSTRUCTIONS,
             name="ToolAgent",
             tools=tuple(tools),
-            model_settings={"openai_reasoning_effort": "low"},
         )
 
         @agent.instructions
