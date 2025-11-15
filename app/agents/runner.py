@@ -96,7 +96,7 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
 3. collaborative_reasoning
    - Use this for complex tasks that require deeper internal analysis with multiple reasoning rounds.
 4. delegate_to_tool_agent (ToolAgent bridge)
-   - Fetch real-time data, customer-service policies, payment-method details, and bot command inputs.
+   - Use this tool to fetch real-time data, retrieve official customer-service policies, obtain payment-method information, or process bot-related command inputs.
    - Delegate data retrieval tasks (web search, URL fetch, Python execution, market data, business docs)
    - Interpret the returned JSON and produce the final user-facing answer
    - Handle three response types:
