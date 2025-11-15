@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.messages import ModelMessage
 from app.agents.collaborator import CollaboratorAgent, CollaboratorTurnOutput
-from app.agents.tool_agent import ToolAgent, ToolAgentDependencies
+from app.agents.tool_agent import ToolAgent, ToolAgentCallLimitExceeded, ToolAgentDependencies
 from app.agents.tool_types import SubAgentToolResult, ToolErrorPayload
 from app.services.external_tools import (
     CodeExecutionService,

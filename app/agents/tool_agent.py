@@ -123,4 +123,9 @@ class ToolAgent:
         return await self.agent.run(prompt, deps=deps, message_history=())
 
 
-__all__ = ["ToolAgent", "ToolAgentDependencies", "SubAgentToolResult"]
+__all__ = [
+    "ToolAgent",
+    "ToolAgentDependencies",
+    "SubAgentToolResult",
+    "ToolAgentCallLimitExceeded",
+]
