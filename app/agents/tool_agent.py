@@ -6,29 +6,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
 import httpx
-from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.run import AgentRunResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.model_factory import build_model_spec
-from app.agents.toolkit import ToolErrorPayload
+from app.agents.tool_types import SubAgentToolResult, ToolErrorPayload
 from app.config import BotSettings, ExternalToolSettings
-
-
-class SubAgentToolResult(BaseModel):
-    status: Literal["SUCCESS", "BUSINESS_ERROR", "TOOL_FAILURE"] = Field(
-        ...,
-        description="SUCCESS for completed tasks, BUSINESS_ERROR for business-level issues, TOOL_FAILURE for ToolAgent faults",
-    )
-    payload: dict[str, Any] | None = Field(
-        default=None,
-        description="Machine-readable payload returned by the tool when status is SUCCESS",
-    )
-    error: ToolErrorPayload | None = Field(
-        default=None,
-        description="Structured error information returned when status is not SUCCESS",
-    )
 
 
 @dataclass(slots=True)
