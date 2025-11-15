@@ -291,7 +291,6 @@ ToolDelegationOutput = SubAgentToolResult
 class ToolErrorPayload(BaseModel):
     error_code: str = Field(..., description="Stable identifier for the failure")
     message: str = Field(..., description="Short diagnostic hint")
-    details: dict[str, Any] | None = None
 
 
 T = TypeVar("T")
@@ -603,17 +602,12 @@ async def delegate_tool_agent(ctx: RunContext, data: ToolDelegationInput) -> Too
             error=str(exc),
         )
         return SubAgentToolResult(
-            status="AGENT_FAILURE",
-            result=None,
-            error_code="TOOL_AGENT_FAILURE",
-            message="Tool agent failed to execute the delegated command",
-            metadata={
-                "tool_name": "delegate_to_tool_agent",
-                "tool_input": {
-                    "command": data.command,
-                    "max_tool_calls": data.max_tool_calls,
-                },
-            },
+            status="TOOL_FAILURE",
+            payload=None,
+            error=ToolErrorPayload(
+                error_code="TOOL_AGENT_FAILURE",
+                message="Tool agent failed to execute the delegated command",
+            ),
         )
     return run_result.output
 
@@ -761,12 +755,7 @@ async def _maybe_notify_user(ctx: RunContext | None, payload: Any) -> None:
 async def _wrap_tool_error(ctx: RunContext | None, exc: Exception) -> ToolErrorPayload:
     error_code = getattr(exc, "error_code", None) or exc.__class__.__name__
     message = str(exc) or error_code
-    metadata: dict[str, Any] | None = None
-    if ctx and getattr(ctx, "deps", None) is not None:
-        metadata = {
-            "environment": getattr(ctx.deps, "environment", None),
-        }
-    return ToolErrorPayload(error_code=error_code, message=message, details=metadata)
+    return ToolErrorPayload(error_code=error_code, message=message)
 
 
 def _log_tool_error(should_log: bool, tool_name: str, exc: Exception) -> None:

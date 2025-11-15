@@ -12,29 +12,22 @@ from pydantic_ai.run import AgentRunResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.model_factory import build_model_spec
+from app.agents.toolkit import ToolErrorPayload
 from app.config import BotSettings, ExternalToolSettings
 
 
 class SubAgentToolResult(BaseModel):
-    status: Literal["SUCCESS", "BUSINESS_ERROR", "AGENT_FAILURE"] = Field(
+    status: Literal["SUCCESS", "BUSINESS_ERROR", "TOOL_FAILURE"] = Field(
         ...,
-        description="SUCCESS for completed tasks, BUSINESS_ERROR for business-level issues, AGENT_FAILURE for ToolAgent faults",
+        description="SUCCESS for completed tasks, BUSINESS_ERROR for business-level issues, TOOL_FAILURE for ToolAgent faults",
     )
-    result: Any | None = Field(
+    payload: dict[str, Any] | None = Field(
         default=None,
-        description="Raw machine-friendly payload returned by the tool, if available",
+        description="Machine-readable payload returned by the tool when status is SUCCESS",
     )
-    error_code: str | None = Field(
+    error: ToolErrorPayload | None = Field(
         default=None,
-        description="Stable machine-readable error identifier for BUSINESS_ERROR or AGENT_FAILURE results",
-    )
-    message: str | None = Field(
-        default=None,
-        description="Short diagnostic string for BUSINESS_ERROR or AGENT_FAILURE results",
-    )
-    metadata: dict[str, Any] | None = Field(
-        default=None,
-        description="Additional metadata such as tool name, inputs, or tracing identifiers",
+        description="Structured error information returned when status is not SUCCESS",
     )
 
 
@@ -61,17 +54,15 @@ You are a ToolAgent.
    - When planning multiple tool calls, consider user intent and avoid unnecessary chains of dependency.
 5. Output must be valid JSON with the exact shape:
    {
-     "status": "SUCCESS" | "BUSINESS_ERROR" | "AGENT_FAILURE",
-     "result": {...} | null,
-     "error_code": "..." | null,
-     "message": "..." | null,
-     "metadata": {...} | null
+     "status": "SUCCESS" | "BUSINESS_ERROR" | "TOOL_FAILURE",
+     "payload": {...} | null,
+     "error": {"error_code": "...", "message": "..."} | null
    }
 6. If no available tool can complete the task, return BUSINESS_ERROR with error_code="NO_AVAILABLE_TOOL".
-7. If the tools encounter an internal failure, return AGENT_FAILURE with error_code describing the issue.
+7. If the tools encounter an internal failure, return TOOL_FAILURE with a descriptive error_code.
 8. Do not invent tools, and do not reference the user or command in the output.
-9. metadata must include at least "tool_name" and "tool_input" describing the tool invocation that produced the result.
-   - If multiple tools were used, metadata should reflect all the tools invocation.
+9. When status is SUCCESS, payload must include the invoked tool name, inputs, and outputs.
+   - If multiple tools were used, payload should reflect all the tools invocation.
 
 # Guidelines
 1. google_search (real-time info)
