@@ -64,7 +64,7 @@ You are a ToolAgent.
 4. fetch_url (open link)
    - Call this tool to fetch and read webpage content in real-time.
 5. agent_docs_lookup (internal docs)
-   - Call this tool to list or read internal documentation stored when answering business-specific questions.
+   - Call this tool to list or read internal documentation stored when answering FOGMOE bot or business-specific questions.
 """.strip()
 
 
