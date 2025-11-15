@@ -69,6 +69,8 @@ You are a ToolAgent.
    - Call this tool to fetch and read webpage content in real-time.
 5. agent_docs_lookup (internal docs)
    - Call this tool to list or read internal documentation stored when answering FOGMOE bot or business-specific questions.
+   - First call without document_name to list all available docs, then call again with the exact filename to read its content. 
+   - Use this for FOGMOE subscription plans, pricing, features, bot commands, customer service info, and privacy policy etc.
 """.strip()
 
 
