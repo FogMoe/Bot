@@ -65,7 +65,11 @@ class ToolTemplate:
                     serialize_tool_payload(tool_input),
                 )
             await _maybe_notify_user(ctx, tool_input)
-            result = await original_handler(*args, **kwargs)
+            try:
+                result = await original_handler(*args, **kwargs)
+            except Exception as exc:
+                _log_tool_error(should_log, self.name, exc)
+                return _wrap_tool_error(ctx, exc)
             if should_log:
                 log_tool_event(self.name, "response", serialize_tool_payload(result))
             return result
@@ -282,6 +286,12 @@ class ToolDelegationInput(BaseModel):
 
 
 ToolDelegationOutput = SubAgentToolResult
+
+
+class ToolErrorPayload(BaseModel):
+    error_code: str = Field(..., description="Stable identifier for the failure")
+    message: str = Field(..., description="Short diagnostic hint")
+    details: dict[str, Any] | None = None
 
 
 T = TypeVar("T")
@@ -585,7 +595,26 @@ async def delegate_tool_agent(ctx: RunContext, data: ToolDelegationInput) -> Too
         tool_settings=deps.tool_settings,
         tool_call_limit=data.max_tool_calls,
     )
-    run_result = await tool_agent.run(data.command, deps=tool_deps)
+    try:
+        run_result = await tool_agent.run(data.command, deps=tool_deps)
+    except Exception as exc:  # pragma: no cover - defensive guardrail
+        logger.warning(
+            "tool_agent_run_failed",
+            error=str(exc),
+        )
+        return SubAgentToolResult(
+            status="AGENT_FAILURE",
+            result=None,
+            error_code="TOOL_AGENT_FAILURE",
+            message="Tool agent failed to execute the delegated command",
+            metadata={
+                "tool_name": "delegate_to_tool_agent",
+                "tool_input": {
+                    "command": data.command,
+                    "max_tool_calls": data.max_tool_calls,
+                },
+            },
+        )
     return run_result.output
 
 
@@ -687,6 +716,7 @@ __all__ = [
     "AgentDocsOutput",
     "ToolDelegationInput",
     "ToolDelegationOutput",
+    "ToolErrorPayload",
     "agent_docs_tool",
     "delegate_tool_agent",
 ]
@@ -726,3 +756,20 @@ async def _maybe_notify_user(ctx: RunContext | None, payload: Any) -> None:
         await callback(notice)
     except Exception as exc:  # pragma: no cover - notification best effort
         logger.warning("tool_notification_failed", error=str(exc))
+
+
+async def _wrap_tool_error(ctx: RunContext | None, exc: Exception) -> ToolErrorPayload:
+    error_code = getattr(exc, "error_code", None) or exc.__class__.__name__
+    message = str(exc) or error_code
+    metadata: dict[str, Any] | None = None
+    if ctx and getattr(ctx, "deps", None) is not None:
+        metadata = {
+            "environment": getattr(ctx.deps, "environment", None),
+        }
+    return ToolErrorPayload(error_code=error_code, message=message, details=metadata)
+
+
+def _log_tool_error(should_log: bool, tool_name: str, exc: Exception) -> None:
+    logger.warning("tool_execution_failed", tool=tool_name, error=str(exc))
+    if should_log:
+        log_tool_event(tool_name, "error", serialize_tool_payload({"error": str(exc)}))

@@ -16,8 +16,9 @@ from app.config import BotSettings, ExternalToolSettings
 
 
 class SubAgentToolResult(BaseModel):
-    status: Literal["SUCCESS", "BUSINESS_ERROR"] = Field(
-        ..., description="Indicates whether the requested task succeeded at the business level"
+    status: Literal["SUCCESS", "BUSINESS_ERROR", "AGENT_FAILURE"] = Field(
+        ...,
+        description="SUCCESS for completed tasks, BUSINESS_ERROR for business-level issues, AGENT_FAILURE for ToolAgent faults",
     )
     result: Any | None = Field(
         default=None,
@@ -25,11 +26,11 @@ class SubAgentToolResult(BaseModel):
     )
     error_code: str | None = Field(
         default=None,
-        description="Stable machine-readable error identifier for BUSINESS_ERROR results",
+        description="Stable machine-readable error identifier for BUSINESS_ERROR or AGENT_FAILURE results",
     )
     message: str | None = Field(
         default=None,
-        description="Short diagnostic string for BUSINESS_ERROR results",
+        description="Short diagnostic string for BUSINESS_ERROR or AGENT_FAILURE results",
     )
     metadata: dict[str, Any] | None = Field(
         default=None,
@@ -60,15 +61,16 @@ You are a ToolAgent.
    - When planning multiple tool calls, consider user intent and avoid unnecessary chains of dependency.
 5. Output must be valid JSON with the exact shape:
    {
-     "status": "SUCCESS" | "BUSINESS_ERROR",
+     "status": "SUCCESS" | "BUSINESS_ERROR" | "AGENT_FAILURE",
      "result": {...} | null,
      "error_code": "..." | null,
      "message": "..." | null,
      "metadata": {...} | null
    }
 6. If no available tool can complete the task, return BUSINESS_ERROR with error_code="NO_AVAILABLE_TOOL".
-7. Do not invent tools, and do not reference the user or command in the output.
-8. metadata must include at least "tool_name" and "tool_input" describing the tool invocation that produced the result.
+7. If the tools encounter an internal failure, return AGENT_FAILURE with error_code describing the issue.
+8. Do not invent tools, and do not reference the user or command in the output.
+9. metadata must include at least "tool_name" and "tool_input" describing the tool invocation that produced the result.
    - If multiple tools were used, metadata should reflect all the tools invocation.
 
 # Guidelines
