@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Literal, Sequence
+from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Sequence
 
 import httpx
 from pydantic_ai import Agent, RunContext
@@ -13,8 +13,6 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.messages import ModelMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.collaborator import CollaboratorAgent
-from app.agents.tool_agent import ToolAgent
 from app.agents.model_factory import build_model_spec
 from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
@@ -25,13 +23,16 @@ from app.services.user_insights import UserInsightService
 from app.utils.datetime import utc_now
 from app.utils.retry import retry_async
 
+if TYPE_CHECKING:
+    from app.agents.collaborator import CollaboratorAgent
+    from app.agents.tool_agent import ToolAgent
+
+
 AGENT_RUN_MAX_ATTEMPTS = 3
 AGENT_RUN_RETRY_BASE_DELAY = 1.0
-_PRIMARY_AGENT_TOOL_NAMES: tuple[str, ...] = (
+_DISABLED_AGENT_TOOLS: tuple[str, ...] = (
     "collaborative_reasoning",
     "delegate_to_tool_agent",
-    "update_impression",
-    "fetch_permanent_summaries",
 )
 
 
@@ -47,8 +48,8 @@ class AgentDependencies:
     tool_settings: ExternalToolSettings = field(default_factory=ExternalToolSettings)
     user_profile: dict[str, str] | None = None
     impression: str | None = None
-    collaborator_agent: CollaboratorAgent | None = None
-    tool_agent: ToolAgent | None = None
+    collaborator_agent: "CollaboratorAgent | None" = None
+    tool_agent: "ToolAgent | None" = None
     collaborator_threads: dict[str, list[ModelMessage]] = field(default_factory=dict)
     environment: Literal["dev", "staging", "prod"] = "dev"
     tool_notification_cb: Callable[[str], Awaitable[None]] | None = None
@@ -59,7 +60,7 @@ def build_agent(
 ) -> Agent[AgentDependencies, str]:
     registry = tool_registry or ToolRegistry()
     model_spec = build_model_spec(settings.llm.provider, settings.llm.model, settings.llm)
-    tools = registry.iter_tools(include=_PRIMARY_AGENT_TOOL_NAMES)
+    tools = registry.iter_tools(exclude=_DISABLED_AGENT_TOOLS)
     agent = Agent(
         model=model_spec,
         deps_type=AgentDependencies,
@@ -76,7 +77,8 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
 
 # Tools
 ## Tool Calling Policy
-- You have access to external tools, a collaborator agent, and a ToolAgent bridge that can use all execution tools on your behalf.
+- You have direct access to the standard execution tools (google_search, fetch_url, fetch_market_snapshot, execute_python_code, agent_docs_lookup, update_impression, fetch_permanent_summaries).
+- Collaborative multi-agent reasoning and ToolAgent delegation are temporarily disabled. Perform reasoning steps yourself and call tools directly when external data is needed.
 - Tool calls are an internal mechanism and must never be mentioned to users.
   - Never reveal, reference, or list internal tool names. 
   - When describing your capabilities, use high-level, abstract categories instead of tool-level details.
@@ -97,26 +99,10 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
 2. fetch_permanent_summaries
    - Call this tool when you need to retrieve the user's historical conversation summaries.
    - Lack of context and user mentions of previously discussed topics are good indicators to use this tool.
-3. collaborative_reasoning
-   - Use this for complex tasks that require deeper internal analysis with multiple reasoning rounds.
-4. delegate_to_tool_agent (ToolAgent bridge)
-   - Use this ONLY for RAW DATA RETRIEVAL: web search, fetching webpage content, market data lookup, or internal document lookup.
-   - The ToolAgent returns structured JSON with raw data. YOU are responsible for analyzing, summarizing, and presenting it to the user.
-   - Never ask ToolAgent to "summarize" or "analyze" - only ask it to "get", "fetch", or "retrieve" data.
-
-### ToolAgent Usage Guidelines
-- When the user asks anything about policies, pricing, "about you", FOGMOE usage, or official information, you must delegate with a command that tells the ToolAgent to get the documentation before answering.
-- Command examples:
-  - Good: "Fetch the content of webpage https://..."
-  - Good: "Get internal documentation about subscription plans"
-  - Bad: "Summarize the webpage at https://..."
-  - Bad: "Analyze the documentation and extract key points"
-- Do not mention ToolAgent or its internal tools to the user. Just explain outcomes in plain language after interpreting the structured result.
-- When describing what you can do, use ONLY user-facing language:
-  - Say: "I can search the web for you"
-  - Don't say: "I can use the google_search tool"
-  - Say: "I retrieved information from that webpage"
-  - Don't say: "I used fetch_url to get the content"
+3. agent_docs_lookup
+   - Call this tool to list or read internal documentation whenever the user asks about policies, pricing, "about you", FOGMOE usage, command help, or official support.
+4. google_search / fetch_url / fetch_market_snapshot / execute_python_code
+   - Use these tools for web search, browsing, market data, or complex calculations when the user requires up-to-date or computed information.
       
 ## Multi-Step Rules
 - Call tools as needed, including multiple times.
@@ -229,9 +215,8 @@ class AgentOrchestrator:
         self.tool_registry = tool_registry or ToolRegistry()
         self.agent = build_agent(self.settings, tool_registry=self.tool_registry)
         self.summary_agent = SummaryAgent.build(self.settings)
-        self.collaborator_agent = CollaboratorAgent.build(self.settings)
-        subagent_tools = self.tool_registry.iter_tools(exclude=_PRIMARY_AGENT_TOOL_NAMES)
-        self.tool_agent = ToolAgent.build(self.settings, tools=subagent_tools)
+        self.collaborator_agent = None
+        self.tool_agent = None
 
     async def run(
         self,
@@ -264,8 +249,6 @@ class AgentOrchestrator:
                 tool_settings=self.settings.external_tools,
                 user_profile=user_profile,
                 impression=user_impression,
-                collaborator_agent=self.collaborator_agent,
-                tool_agent=self.tool_agent,
                 environment=self.settings.environment,
                 tool_notification_cb=tool_notification_cb,
             )
