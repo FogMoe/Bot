@@ -235,9 +235,9 @@ class CollaborativeReasoningInput(ToolInputBase):
         description="If True, will forcefully clear the history of the specified session_id and start over",
     )
     max_rounds: int = Field(
-        default=5,
+        default=3,
         ge=1,
-        le=10,
+        le=5,
         description="Maximum number of internal collaborator iterations for this call",
     )
 
