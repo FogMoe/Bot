@@ -4,3 +4,6 @@
 # 如何购买
 现在内测中，无需购买。
 用户可以加入先关注官方 [X账号](https://x.com/FOG_MOE)，然后加入这个 [Telegram群组](https://t.me/FOG_MOE) 获取免费订阅。
+
+# 订阅计划
+当前支持的订阅计划按等级划分：Free, Plus, Pro, Max

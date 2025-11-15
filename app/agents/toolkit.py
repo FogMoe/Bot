@@ -271,18 +271,18 @@ class ToolDelegationInput(BaseModel):
         ...,
         min_length=1,
         max_length=50,
-        description="User-visible message explaining that the assistant is processing the request",
+        description="Short message shown to the user to inform while data is being fetched",
     )
     command: str = Field(
         ...,
         min_length=1,
-        description="Natural-language instruction describing the task for the tool agent",
+        description="A natural-language instruction describing only the raw data to retrieve",
     )
     max_tool_calls: int = Field(
         default=3,
         ge=1,
         le=5,
-        description="Maximum number of internal tool calls permitted for this delegation",
+        description="Maximum number of tool calls for this data-retrieval operation",
     )
 
 
@@ -612,7 +612,7 @@ DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
     ToolTemplate(
         handler=delegate_tool_agent,
         name="delegate_to_tool_agent",
-        description="Delegate a natural-language command to the internal ToolAgent for execution",
+        description="Delegate a natural-language raw data retrieval command to the internal ToolAgent for execution",
     ),
     ToolTemplate(
         handler=google_search_tool,
