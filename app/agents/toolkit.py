@@ -235,9 +235,9 @@ class CollaborativeReasoningInput(ToolInputBase):
         description="If True, will forcefully clear the history of the specified session_id and start over",
     )
     max_rounds: int = Field(
-        default=3,
+        default=5,
         ge=1,
-        le=5,
+        le=10,
         description="Maximum number of internal collaborator iterations for this call",
     )
 
@@ -592,6 +592,19 @@ async def delegate_tool_agent(ctx: RunContext, data: ToolDelegationInput) -> Too
     )
     try:
         run_result = await tool_agent.run(data.command, deps=tool_deps)
+    except ToolAgentCallLimitExceeded as exc:
+        logger.warning(
+            "tool_agent_tool_budget_exceeded",
+            error=str(exc),
+        )
+        return SubAgentToolResult(
+            status="TOOL_FAILURE",
+            payload=None,
+            error=ToolErrorPayload(
+                error_code="TOOL_AGENT_BUDGET_EXCEEDED",
+                message="ToolAgent exhausted its internal tool-call budget",
+            ),
+        )
     except Exception as exc:  # pragma: no cover - defensive guardrail
         logger.warning(
             "tool_agent_run_failed",

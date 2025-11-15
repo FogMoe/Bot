@@ -25,6 +25,10 @@ class ToolAgentDependencies:
     tool_call_count: int = 0
 
 
+class ToolAgentCallLimitExceeded(RuntimeError):
+    """Raised when the tool agent exceeds its configured tool budget."""
+
+
 _TOOL_AGENT_INSTRUCTIONS = """\
 # Role
 You are a ToolAgent.
@@ -102,6 +106,8 @@ class ToolAgent:
             limit = ctx.deps.tool_call_limit
             if limit <= 0:
                 return ""
+            if ctx.deps.tool_call_count >= limit:
+                raise ToolAgentCallLimitExceeded("Tool call limit exceeded for this run")
             return f"Maximum tool calls allowed during this run: {limit}."
 
         return cls(agent)
