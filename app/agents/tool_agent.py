@@ -118,7 +118,10 @@ class ToolAgent:
         *,
         deps: ToolAgentDependencies,
     ) -> AgentRunResult[SubAgentToolResult]:
-        prompt = f"Command:\n{command.strip()}" if command else "Command:\n"
+        command_text = command.strip() if command else ""
+        limit = deps.tool_call_limit
+        budget_hint = f"\n\nTool call budget for this task: {limit} calls maximum." if limit > 0 else ""
+        prompt = f"Command:\n{command_text}{budget_hint}"
         deps.tool_call_count = 0
         return await self.agent.run(prompt, deps=deps, message_history=())
 
