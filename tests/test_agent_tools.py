@@ -121,7 +121,7 @@ async def test_fetch_market_snapshot_tool():
         ExternalToolSettings(),
     )
 
-    data = FetchMarketSnapshotInput(query="nvda missing btc", user_notice="查行情")
+    data = FetchMarketSnapshotInput(query="nvda missing btc")
     result = await fetch_market_snapshot_tool(ctx, data)
 
     assert result.items
@@ -139,7 +139,7 @@ async def test_fetch_market_snapshot_tool_handles_error():
         ExternalToolSettings(),
     )
 
-    data = FetchMarketSnapshotInput(query="nvda", user_notice="查行情")
+    data = FetchMarketSnapshotInput(query="nvda")
     result = await fetch_market_snapshot_tool(ctx, data)
 
     assert not result.items

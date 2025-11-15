@@ -14,6 +14,7 @@ from pydantic_ai.messages import ModelMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.collaborator import CollaboratorAgent
+from app.agents.tool_agent import ToolAgent
 from app.agents.model_factory import build_model_spec
 from app.agents.summary import SummaryAgent
 from app.agents.toolkit import ToolRegistry
@@ -26,6 +27,10 @@ from app.utils.retry import retry_async
 
 AGENT_RUN_MAX_ATTEMPTS = 3
 AGENT_RUN_RETRY_BASE_DELAY = 1.0
+_PRIMARY_AGENT_TOOL_NAMES: tuple[str, ...] = (
+    "collaborative_reasoning",
+    "delegate_to_tool_agent",
+)
 
 
 @dataclass
@@ -41,6 +46,7 @@ class AgentDependencies:
     user_profile: dict[str, str] | None = None
     impression: str | None = None
     collaborator_agent: CollaboratorAgent | None = None
+    tool_agent: ToolAgent | None = None
     collaborator_threads: dict[str, list[ModelMessage]] = field(default_factory=dict)
     environment: Literal["dev", "staging", "prod"] = "dev"
     tool_notification_cb: Callable[[str], Awaitable[None]] | None = None
@@ -51,6 +57,7 @@ def build_agent(
 ) -> Agent[AgentDependencies, str]:
     registry = tool_registry or ToolRegistry()
     model_spec = build_model_spec(settings.llm.provider, settings.llm.model, settings.llm)
+    tools = registry.iter_tools(include=_PRIMARY_AGENT_TOOL_NAMES)
     agent = Agent(
         model=model_spec,
         deps_type=AgentDependencies,
@@ -67,10 +74,10 @@ Provide clear answers, execute tasks, and use tools only when appropriate.
 
 # Tools
 ## Tool Calling Policy
-- You have access to external tools.
+- You have access to a collaborator agent and a ToolAgent bridge that can use all execution tools on your behalf.
 - Tool calls are an internal mechanism and must never be mentioned to users.
   - Never reveal, reference, or list internal tool names. 
-  - When describing your capabilities, always use high-level, abstract categories instead of tool-level details.
+  - When describing your capabilities, use high-level, abstract categories instead of tool-level details.
 - Call a tool only when:
   1. The user explicitly requests information that requires external data or functionality, or
   2. A tool is clearly the optimal method to fulfill the request.
@@ -151,7 +158,7 @@ Your behavior results from multiple coordinated components.
 - If a tool request is incomplete, specify exactly which information is missing.
 """,
         name="FOGMOE",
-        tools=list(registry.iter_tools()),
+        tools=list(tools),
     )
 
     @agent.instructions
@@ -205,9 +212,12 @@ class AgentOrchestrator:
         self, settings: BotSettings | None = None, tool_registry: ToolRegistry | None = None
     ) -> None:
         self.settings = settings or get_settings()
-        self.agent = build_agent(self.settings, tool_registry=tool_registry)
+        self.tool_registry = tool_registry or ToolRegistry()
+        self.agent = build_agent(self.settings, tool_registry=self.tool_registry)
         self.summary_agent = SummaryAgent.build(self.settings)
         self.collaborator_agent = CollaboratorAgent.build(self.settings)
+        subagent_tools = self.tool_registry.iter_tools(exclude=_PRIMARY_AGENT_TOOL_NAMES)
+        self.tool_agent = ToolAgent.build(self.settings, tools=subagent_tools)
 
     async def run(
         self,
@@ -241,6 +251,7 @@ class AgentOrchestrator:
                 user_profile=user_profile,
                 impression=user_impression,
                 collaborator_agent=self.collaborator_agent,
+                tool_agent=self.tool_agent,
                 environment=self.settings.environment,
                 tool_notification_cb=tool_notification_cb,
             )

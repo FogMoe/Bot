@@ -37,7 +37,7 @@
    - 出错时抛 `ToolServiceError`，例如网络失败或 API 返回非 2xx。
 
 3. **工具输入/输出模型**
-   - `SendEmojiInput(ToolInputBase)`：可选字段 `style` 或 `category`，默认 `random`，以及用户提示 `user_notice`（如“正在发送随机表情…”）。
+   - `SendEmojiInput(ToolInputBase)`：可选字段 `style` 或 `category`，默认 `random`。
    - `SendEmojiOutput(BaseModel)`：
      - `image_url`: str
      - `caption`: Optional[str]

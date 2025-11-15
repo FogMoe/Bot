@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.messages import ModelMessage
 from app.agents.collaborator import CollaboratorAgent, CollaboratorTurnOutput
+from app.agents.tool_agent import SubAgentToolResult, ToolAgent, ToolAgentDependencies
 from app.services.external_tools import (
     CodeExecutionService,
     MarketDataService,
@@ -56,6 +57,7 @@ class ToolTemplate:
             ctx = extract_ctx(args, kwargs, self.takes_ctx)
             should_log = should_log_tool_call(ctx)
             tool_input = extract_tool_arguments(args, kwargs, self.takes_ctx)
+            _enforce_tool_budget(ctx)
             if should_log:
                 log_tool_event(
                     self.name,
@@ -79,13 +81,7 @@ class ToolTemplate:
 
 
 class ToolInputBase(BaseModel):
-    user_notice: str = Field(
-        min_length=1,
-        max_length=50,
-        description=("User-facing message displayed in user's language when this tool runs\n"
-                     'For example: "I am helping you look up relevant information…"'
-        ),
-    )
+    """Base class for tool inputs."""
 
 
 class SilentToolInput(BaseModel):
@@ -263,6 +259,29 @@ class AgentDocsOutput(BaseModel):
     documents: list[str] = Field(default_factory=list)
     selected_document: str | None = None
     content: str | None = None
+
+
+class ToolDelegationInput(BaseModel):
+    user_notice: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="User-visible message explaining that the assistant is processing the request",
+    )
+    command: str = Field(
+        ...,
+        min_length=1,
+        description="Natural-language instruction describing the task for the tool agent",
+    )
+    max_tool_calls: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Maximum number of internal tool calls permitted for this delegation",
+    )
+
+
+ToolDelegationOutput = SubAgentToolResult
 
 
 T = TypeVar("T")
@@ -551,7 +570,31 @@ async def agent_docs_tool(ctx: RunContext, data: AgentDocsInput) -> AgentDocsOut
     )
 
 
+async def delegate_tool_agent(ctx: RunContext, data: ToolDelegationInput) -> ToolDelegationOutput:
+    deps = getattr(ctx, "deps", None)
+    if deps is None:
+        raise RuntimeError("Tool agent dependencies are missing")
+    tool_agent: ToolAgent | None = getattr(deps, "tool_agent", None)
+    if tool_agent is None:
+        raise RuntimeError("Tool agent is not configured")
+
+    tool_deps = ToolAgentDependencies(
+        user_id=deps.user_id,
+        session=deps.session,
+        http_client=deps.http_client,
+        tool_settings=deps.tool_settings,
+        tool_call_limit=data.max_tool_calls,
+    )
+    run_result = await tool_agent.run(data.command, deps=tool_deps)
+    return run_result.output
+
+
 DEFAULT_TOOLS: tuple[ToolTemplate, ...] = (
+    ToolTemplate(
+        handler=delegate_tool_agent,
+        name="delegate_to_tool_agent",
+        description="Delegate a natural-language command to the internal ToolAgent for execution",
+    ),
     ToolTemplate(
         handler=google_search_tool,
         name="google_search",
@@ -602,8 +645,22 @@ class ToolRegistry:
     def register(self, template: ToolTemplate) -> None:
         self._templates.append(template)
 
-    def iter_tools(self) -> Iterable[Tool]:
-        return tuple(template.build() for template in self._templates)
+    def iter_tools(
+        self,
+        *,
+        include: Iterable[str] | None = None,
+        exclude: Iterable[str] | None = None,
+    ) -> Iterable[Tool]:
+        include_set = {name for name in include} if include else None
+        exclude_set = {name for name in exclude} if exclude else set()
+        tools: list[Tool] = []
+        for template in self._templates:
+            if include_set is not None and template.name not in include_set:
+                continue
+            if template.name in exclude_set:
+                continue
+            tools.append(template.build())
+        return tuple(tools)
 
 
 __all__ = [
@@ -628,8 +685,26 @@ __all__ = [
     "CollaborativeReasoningOutput",
     "AgentDocsInput",
     "AgentDocsOutput",
+    "ToolDelegationInput",
+    "ToolDelegationOutput",
     "agent_docs_tool",
+    "delegate_tool_agent",
 ]
+
+
+def _enforce_tool_budget(ctx: RunContext | None) -> None:
+    if ctx is None:
+        return
+    deps = getattr(ctx, "deps", None)
+    if deps is None:
+        return
+    limit = getattr(deps, "tool_call_limit", None)
+    if not limit or limit <= 0:
+        return
+    current = getattr(deps, "tool_call_count", 0)
+    if current >= limit:
+        raise RuntimeError("Tool call limit exceeded for this run")
+    setattr(deps, "tool_call_count", current + 1)
 
 
 async def _maybe_notify_user(ctx: RunContext | None, payload: Any) -> None:
