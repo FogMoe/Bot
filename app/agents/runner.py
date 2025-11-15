@@ -30,6 +30,8 @@ AGENT_RUN_RETRY_BASE_DELAY = 1.0
 _PRIMARY_AGENT_TOOL_NAMES: tuple[str, ...] = (
     "collaborative_reasoning",
     "delegate_to_tool_agent",
+    "update_impression",
+    "fetch_permanent_summaries",
 )
 
 
