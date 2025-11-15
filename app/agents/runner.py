@@ -121,7 +121,7 @@ def build_agent(
 ## Response Style
 - Treat every newline as a separate Telegram message.
   - Use a newline only when you intentionally want to send multiple messages.
-  - To keep everything as one message, avoid newlines unless wrapped inside a code block.
+  - To keep everything as one message, avoid newlines.
 - Avoid using emojis in all responses unless the user explicitly requests them or includes emojis in their own message.
 - Maintain a professional and concise tone unless in complex scenarios.
   - Avoid unnecessary elaboration in casual or simple conversations.
