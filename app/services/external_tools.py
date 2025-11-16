@@ -68,7 +68,7 @@ class SearchService(_BaseToolService):
             return []
         return [f"Search result placeholder for: {query}"]
 
-    async def google_search(self, query: str) -> dict[str, Any]:
+    async def google_search(self, query: str, detailed: bool = False) -> dict[str, Any]:
         query = query.strip()
         if not query:
             raise ToolServiceError("Search query must not be empty.")
@@ -77,8 +77,10 @@ class SearchService(_BaseToolService):
         if not api_key:
             raise ToolServiceError("SerpApi key is not configured.")
 
+        engine = "google" if detailed else self._settings.serpapi_engine
+
         params = {
-            "engine": self._settings.serpapi_engine,
+            "engine": engine,
             "q": query,
             "api_key": api_key,
         }

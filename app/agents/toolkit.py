@@ -107,6 +107,10 @@ class GoogleSearchInput(ToolInputBase):
             "Search query string. Can be keywords, phrases, or complete questions"
         ),
     )
+    detailed: bool = Field(
+        default=False,
+        description="When true, use the standard Google engine instead of the lightweight one",
+    )
 
 
 class GoogleSearchOutput(BaseModel):
@@ -339,7 +343,9 @@ async def _run_with_service_errors(awaitable: Awaitable[T]) -> T:
 
 async def google_search_tool(ctx: RunContext, data: GoogleSearchInput) -> GoogleSearchOutput:
     service = _search_service(ctx)
-    payload = await _run_with_service_errors(service.google_search(data.query))
+    payload = await _run_with_service_errors(
+        service.google_search(data.query, detailed=data.detailed)
+    )
     return GoogleSearchOutput(**payload)
 
 
