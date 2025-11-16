@@ -92,7 +92,7 @@ class ToolInputBase(BaseModel):
         default=None,
         min_length=1,
         max_length=50,
-        description="Short message shown to the user while data is being fetched",
+        description="Short message shown to the user during data processing",
     )
 
 
