@@ -45,7 +45,7 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(setup_routers())
     error_monitor = ErrorMonitor(settings=settings)
-    dp.errors.register(error_monitor)
+    dp.errors.register(error_monitor.handle_error)
 
     database = Database(settings=settings)
 

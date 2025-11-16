@@ -45,7 +45,7 @@ async def test_error_monitor_skips_without_admin():
     bot = DummyBot()
     event = ErrorEvent(update=_make_update(), exception=RuntimeError("boom"))
 
-    result = await monitor(event, bot)
+    result = await monitor.handle_error(event, bot)
 
     assert result is UNHANDLED
     assert bot.sent_messages == []
@@ -58,7 +58,7 @@ async def test_error_monitor_sends_notification():
     bot = DummyBot()
     event = ErrorEvent(update=_make_update(), exception=ValueError("bad input"))
 
-    result = await monitor(event, bot)
+    result = await monitor.handle_error(event, bot)
 
     assert result is UNHANDLED
     assert len(bot.sent_messages) == 1

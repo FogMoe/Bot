@@ -26,7 +26,7 @@ class ErrorMonitor:
     def __init__(self, settings: BotSettings) -> None:
         self._settings = settings
 
-    async def __call__(self, event: ErrorEvent, bot: Bot):
+    async def handle_error(self, event: ErrorEvent, bot: Bot):
         """Send error summary to the configured admin chat."""
 
         admin_id = self._settings.admin_telegram_id
