@@ -93,3 +93,7 @@ pytest          # 运行全部单测
   - 仅 `BOT_ADMIN_TELEGRAM_ID` 指定的管理员可用，用于创建新的订阅卡。
 - /announce <text> - 向所有用户广播公告
   - 仅 `BOT_ADMIN_TELEGRAM_ID` 指定的管理员可用，会把公告文本发送给所有机器人用户。
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See `LICENSE`.
